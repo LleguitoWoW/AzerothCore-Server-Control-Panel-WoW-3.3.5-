@@ -1,0 +1,36 @@
+Configuracion
+
+
+[Cabeza  ]  ████████████████████  [Munecas ]
+[Cuello  ]  █  Silueta del      █  [Manos   ]
+[Hombros ]  █  personaje        █  [Anillo 1]
+[Camisa  ]  █  (342x460px)      █  [Anillo 2]
+[Pecho   ]  █                   █  [Abal. 1 ]
+[Cintura ]  █                   █  [Abal. 2 ]
+[Piernas ]  ████████████████████  [Espalda ]
+[Pies    ]    [Main] [Off] [Dist]  [Tabardo ]
+
+
+
+Equivalencias
+
+silueta_1_0.png   → Humano macho
+silueta_1_1.png   → Humano hembra
+silueta_2_0.png   → Orco macho -
+silueta_2_1.png   → Orco hembra -
+silueta_3_0.png   → Enano macho
+silueta_3_1.png   → Enano hembra
+silueta_4_0.png   → Elfo de la Noche macho
+silueta_4_1.png   → Elfo de la Noche hembra
+silueta_5_0.png   → No-Muerto macho
+silueta_5_1.png   → No-Muerto hembra
+silueta_6_0.png   → Tauren macho -
+silueta_6_1.png   → Tauren hembra -
+silueta_7_0.png   → Gnomo macho
+silueta_7_1.png   → Gnomo hembra
+silueta_8_0.png   → Trol macho
+silueta_8_1.png   → Trol hembra
+silueta_10_0.png  → Elfo de Sangre macho
+silueta_10_1.png  → Elfo de Sangre hembra
+silueta_11_0.png  → Draenei macho
+silueta_11_1.png  → Draenei hembra
