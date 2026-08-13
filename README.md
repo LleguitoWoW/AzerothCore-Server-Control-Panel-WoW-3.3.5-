@@ -140,6 +140,3 @@ Developed by **[LleguitoWoW](https://github.com/LleguitoWoW)**.
 
 ---
 
-## 📄 License
-
-Add the license you want to use for the project here (e.g., MIT). If none is included, all rights are reserved by default.
