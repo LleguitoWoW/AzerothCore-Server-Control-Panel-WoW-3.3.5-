@@ -140,3 +140,9 @@ Developed by **[LleguitoWoW](https://github.com/LleguitoWoW)**.
 
 ---
 
+##  Imagenes
+
+<img width="1037" height="1125" alt="1" src="https://github.com/user-attachments/assets/d0967f4a-2db6-46d1-b7b8-23c33bd7948a" />
+<img width="806" height="652" alt="2" src="https://github.com/user-attachments/assets/8adf2561-cb0f-48d3-bfe9-c3bbf3a87dfd" />
+<img width="774" height="677" alt="3" src="https://github.com/user-attachments/assets/5e5523b2-2e7b-4763-933a-e31cb6a7d99e" />
+
