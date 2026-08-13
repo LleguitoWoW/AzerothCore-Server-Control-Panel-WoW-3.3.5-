@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creador de NPCBots - AzerothCore 3.3.5</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght=500;700;900&family=Spectral:wght=400;500;600;700&family=JetBrains+Mono:wght=400;500;600&display=swap');
+
+:root{
+  --bg-0:#11131a;
+  --bg-1:#181b24;
+  --bg-2:#20242f;
+  --bg-3:#2a2f3d;
+  --line:#383f52;
+  --line-soft:#2a2f3d;
+  --gold:#c9a14a;
+  --gold-bright:#e9c876;
+  --gold-dim:#8a6f37;
+  --ink:#e9e6da;
+  --ink-dim:#a7a8b8;
+  --ink-faint:#6e7185;
+  --alliance:#3f7fc1;
+  --horde:#a23636;
+  --ok:#5b9a5f;
+  --warn:#c98a3a;
+  --bad:#c1503f;
+  --radius:10px;
+  --shadow:0 18px 50px -20px rgba(0,0,0,0.7);
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(1200px 600px at 15% -10%, #232a3a 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, #2a2030 0%, transparent 55%),
+    var(--bg-0);
+  color:var(--ink);
+  font-family:'Spectral', Georgia, serif;
+  font-size:15px;
+  line-height:1.5;
+  min-height:100vh;
+}
+
+a{color:var(--gold-bright);}
+
+::selection{background:var(--gold-dim); color:#fff;}
+
+.wrap{
+  max-width:1280px;
+  margin:0 auto;
+  padding:28px 20px 60px;
+}
+
+/* ---------- Header ---------- */
+header.top{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:20px;
+  border-bottom:1px solid var(--line);
+  padding-bottom:18px;
+  margin-bottom:26px;
+  flex-wrap:wrap;
+}
+header.top .brand-mark{
+  width:52px;height:52px;border-radius:10px;
+  background:linear-gradient(145deg,#1a2235,#0d1220);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 6px 18px -6px rgba(100,160,255,0.45), 0 0 0 1px rgba(201,161,74,0.3);
+  flex-shrink:0;
+  overflow:hidden;
+}
+header.top .brand-mark img{
+  width:44px;height:44px;object-fit:contain;
+  filter:drop-shadow(0 0 6px rgba(120,180,255,0.6));
+}
+header.top h1{
+  font-family:'Cinzel',serif;
+  font-weight:700;
+  font-size:26px;
+  letter-spacing:0.015em;
+  margin:0;
+  color:var(--ink);
+  display:flex; align-items:center; gap:12px;
+}
+header.top .titles{display:flex;flex-direction:column;gap:4px;}
+header.top p{margin:0;color:var(--ink-dim);font-size:13.5px;letter-spacing:0.01em;}
+header.top .tag{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--gold);
+  border:1px solid var(--gold-dim);
+  padding:5px 10px;border-radius:999px;
+  white-space:nowrap;
+}
+
+/* ---------- Layout ---------- */
+.layout{
+  display:grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap:22px;
+  align-items:start;
+}
+@media (max-width: 980px){
+  .layout{grid-template-columns:1fr;}
+}
+
+.panel{
+  background:linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:20px 22px 24px;
+  margin-bottom:20px;
+  box-shadow:var(--shadow);
+}
+.panel h2{
+  font-family:'Cinzel',serif;
+  font-size:15px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--gold-bright);
+  margin:0 0 4px;
+  display:flex;align-items:center;gap:10px;
+}
+.panel h2 .num{
+  width:22px;height:22px;border-radius:50%;
+  background:var(--bg-3); border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--gold);
+  flex-shrink:0;
+}
+.panel .sub{color:var(--ink-faint); font-size:12.5px; margin:0 0 16px;}
+.panel .sub strong{color:var(--ink-dim);}
+
+/* ---------- Class grid ---------- */
+.class-grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:10px;
+}
+@media (max-width:760px){ .class-grid{grid-template-columns:repeat(2,1fr);} }
+
+.class-card{
+  position:relative;
+  border:1px solid var(--line);
+  background:var(--bg-3);
+  border-radius:8px;
+  padding:11px 8px 9px;
+  cursor:pointer;
+  text-align:center;
+  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  user-select:none;
+}
+.class-card:hover{transform:translateY(-2px); border-color:var(--ccolor);}
+.class-card.selected{
+  border-color:var(--ccolor);
+  box-shadow:0 0 0 1px var(--ccolor), 0 8px 20px -10px var(--ccolor);
+  background:linear-gradient(180deg, color-mix(in srgb, var(--ccolor) 16%, var(--bg-3)), var(--bg-3));
+}
+.class-card .swatch{
+  width:36px;height:36px;border-radius:50%;
+  margin:0 auto 6px;
+  border:2px solid rgba(0,0,0,0.35);
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+  background:var(--bg-0);
+}
+.class-card .swatch img{
+  width:100%;height:100%;
+  object-fit:cover;
+}
+.class-card .cname{font-size:12px; color:var(--ink); font-weight:600; line-height:1.25;}
+.class-card.disabled{opacity:0.4; cursor:not-allowed;}
+.class-card.disabled:hover{transform:none;}
+.class-card .tagdisabled{
+  position:absolute; top:4px; right:4px; font-size:8.5px;
+  font-family:'JetBrains Mono',monospace; color:var(--bad); letter-spacing:0.02em;
+}
+
+.hero-toggle{
+  margin-top:14px; display:flex; align-items:center; gap:8px;
+  font-size:12.5px; color:var(--ink-dim); cursor:pointer; width:fit-content;
+}
+.hero-toggle input{accent-color:var(--gold);}
+.hero-note{
+  margin-top:10px; font-size:12px; color:var(--ink-faint);
+  border-left:2px solid var(--gold-dim); padding-left:10px;
+}
+
+/* ---------- Race / appearance ---------- */
+.row{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:14px;}
+.field{display:flex; flex-direction:column; gap:6px;}
+.field label{font-size:11.5px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-faint);}
+select, input[type=text], input[type=number]{
+  background:var(--bg-3);
+  border:1px solid var(--line);
+  color:var(--ink);
+  border-radius:6px;
+  padding:9px 10px;
+  font-family:'Spectral',serif;
+  font-size:14px;
+  min-width:0;
+}
+select:focus, input:focus{outline:2px solid var(--gold-dim); outline-offset:1px;}
+select:disabled, input:disabled{opacity:0.45; cursor:not-allowed;}
+
+.race-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:8px;}
+@media (max-width:760px){ .race-grid{grid-template-columns:repeat(2,1fr);} }
+.race-pill{
+  border:1px solid var(--line); background:var(--bg-3); border-radius:7px;
+  padding:8px 6px; text-align:center; font-size:12px; cursor:pointer; color:var(--ink-dim);
+  position:relative;
+}
+.race-pill .fac{font-size:9.5px; display:block; margin-top:1px; letter-spacing:0.02em;}
+.race-pill.alliance .fac{color:var(--alliance);}
+.race-pill.horde .fac{color:var(--horde);}
+.race-pill.selected{border-color:var(--gold); background:linear-gradient(180deg,#3a3320,var(--bg-3)); color:var(--ink);}
+.race-pill.invalid{opacity:0.32; cursor:not-allowed; text-decoration:line-through;}
+
+.gender-toggle{display:flex; gap:8px;}
+.gender-btn{
+  border:1px solid var(--line); background:var(--bg-3); color:var(--ink-dim);
+  padding:9px 16px; border-radius:6px; cursor:pointer; font-size:13px;
+}
+.gender-btn.selected{border-color:var(--gold); color:var(--ink); background:#3a3320;}
+
+/* ---------- Armería Cosmética UI ---------- */
+.sliders{
+  display:flex; flex-direction:column; gap:10px; margin-top:12px;
+}
+.cosmetic-option {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg-2); border: 1px solid var(--line-soft);
+  padding: 10px 14px; border-radius: 8px;
+}
+.cosmetic-label {
+  font-size: 13px; font-weight: 600; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.03em;
+}
+.cosmetic-controls {
+  display: flex; align-items: center; gap: 12px;
+}
+.cosmetic-btn {
+  background: var(--bg-3) !important; border-color: var(--line) !important;
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  padding: 0 !important; user-select: none; font-size: 11px;
+}
+.cosmetic-btn:hover { border-color: var(--gold) !important; color: var(--gold-bright) !important; }
+.cosmetic-val {
+  font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--gold-bright);
+  min-width: 50px; text-align: center; background: var(--bg-0); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--line-soft);
+}
+
+.fixed-appearance-box{
+  border:1px dashed var(--line);
+  background:var(--bg-3);
+  border-radius:8px;
+  padding:14px 16px;
+  font-size:13px;
+  color:var(--ink-dim);
+}
+.fixed-appearance-box b{color:var(--gold-bright);}
+
+/* ---------- Buttons ---------- */
+.btn{
+  font-family:'Spectral',serif; font-size:13px; font-weight:600;
+  border-radius:6px; border:1px solid var(--line); background:var(--bg-3);
+  color:var(--ink); padding:9px 14px; cursor:pointer; transition:all .12s ease;
+  display:inline-flex; align-items:center; gap:6px;
+}
+.btn:hover{border-color:var(--gold); color:var(--gold-bright);}
+.btn.primary{ background:linear-gradient(180deg,var(--gold-bright),var(--gold-dim)); color:#1a1306; border-color:var(--gold-dim); font-weight:700;}
+.btn.primary:hover{filter:brightness(1.08);}
+.btn.small{padding:6px 10px; font-size:12px;}
+.btn.danger:hover{border-color:var(--bad); color:#ff8a7a;}
+.btn:disabled{opacity:.4; cursor:not-allowed;}
+
+/* ---------- Sidebar / preview ---------- */
+.sticky{position:sticky; top:20px;}
+
+.preview-card{
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  overflow:hidden;
+  background:var(--bg-2);
+  box-shadow:var(--shadow);
+}
+.preview-banner{
+  height:64px;
+  background:linear-gradient(135deg, var(--ccolor), color-mix(in srgb, var(--ccolor) 40%, #0b0c10));
+  position:relative;
+}
+.preview-body{
+  padding:0 18px 18px; 
+  margin-top:-40px;
+  position:relative; 
+  z-index:2;          
+}
+.preview-portrait{
+  width:84px;height:84px;border-radius:50%;
+  background:var(--bg-3);
+  border:3px solid var(--bg-2);
+  margin:0 auto 8px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 20px -8px rgba(0,0,0,0.6);
+  overflow:hidden;
+}
+.preview-portrait img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.preview-name{text-align:center; font-family:'Cinzel',serif; font-size:18px; margin:2px 0 0; color:var(--ink);}
+.preview-sub{text-align:center; font-size:12px; color:var(--ink-faint); margin:2px 0 12px;}
+.preview-badges{display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:12px;}
+.badge{
+  font-size:11px; padding:4px 9px; border-radius:999px;
+  background:var(--bg-3); border:1px solid var(--line); color:var(--ink-dim);
+}
+.badge.cclass{ color:var(--ccolor); border-color:var(--ccolor);}
+.preview-disclaimer{
+  font-size:11px; color:var(--ink-faint); text-align:center; margin-bottom:12px; line-height:1.4;
+}
+.preview-link{display:flex; justify-content:center;}
+
+/* ---------- SQL output ---------- */
+.sql-block{
+  background:#0d0e13; border:1px solid var(--line); border-radius:8px;
+  margin-bottom:12px; overflow:hidden;
+}
+.sql-block .sql-head{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:8px 12px; background:#15161e; border-bottom:1px solid var(--line);
+  font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--ink-faint); letter-spacing:0.03em;
+}
+.sql-block pre{
+  margin:0; padding:12px 14px; font-family:'JetBrains Mono',monospace; font-size:11.6px;
+  color:#cbd2e0; overflow-x:auto; line-height:1.6; white-space:pre-wrap;
+  word-break:break-all;
+}
+.sql-block pre .kw{color:#e9c876;}
+.sql-block pre .str{color:#9fd49a;}
+.sql-block pre .num{color:#7eb8e8;}
+.sql-actions{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
+
+/* ---------- Roster ---------- */
+.roster-item{
+  display:flex; align-items:center; gap:10px;
+  padding:9px 10px; border:1px solid var(--line-soft); border-radius:77px; margin-bottom:7px;
+  background:var(--bg-3);
+}
+.roster-item .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.roster-item .info{flex:1; min-width:0;}
+.roster-item .info .n{font-size:13px; color:var(--ink); font-weight:600;}
+.roster-item .info .m{font-size:11px; color:var(--ink-faint);}
+.roster-empty{font-size:12.5px; color:var(--ink-faint); padding:8px 2px;}
+
+/* ---------- helper / collapse ---------- */
+details.advanced{margin-top:16px; border-top:1px solid var(--line-soft); padding-top:12px;}
+details.advanced summary{cursor:pointer; font-size:12.5px; color:var(--gold); letter-spacing:0.02em;}
+details.advanced .adv-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:14px;}
+@media (max-width:760px){ details.advanced .adv-grid{grid-template-columns:repeat(2,1fr);} }
+
+.note{
+  font-size:12.5px; color:var(--ink-dim); background:var(--bg-3); border:1px solid var(--line-soft);
+  border-radius:7px; padding:10px 12px; margin-top:10px; line-height:1.5;
+}
+.note.warn{border-color:var(--warn); color:#e3c08e;}
+.note.bad{border-color:var(--bad); color:#f0a99a;}
+
+footer.bottom{
+  margin-top:30px; padding-top:18px; border-top:1px solid var(--line);
+  color:var(--ink-faint); font-size:11.5px; text-align:center;
+}
+footer.bottom .footer-credit{
+  margin-top:14px; padding-top:14px; border-top:1px solid var(--line-soft);
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+}
+footer.bottom .footer-credit .by{
+  color:var(--ink-dim); font-size:12px; letter-spacing:0.04em;
+}
+footer.bottom .footer-credit .author{
+  font-family:'Cinzel',serif; font-size:15px; font-weight:700;
+  color:var(--gold-bright); letter-spacing:0.06em;
+}
+footer.bottom .social-links{
+  display:flex; gap:14px; align-items:center; flex-wrap:wrap; justify-content:center;
+  margin-top:4px;
+}
+footer.bottom .social-links a{
+  display:flex; align-items:center; gap:6px;
+  color:var(--ink-dim); text-decoration:none; font-size:12px;
+  padding:5px 12px; border-radius:999px;
+  border:1px solid var(--line);
+  transition:color 0.2s, border-color 0.2s, background 0.2s;
+}
+footer.bottom .social-links a:hover{ color:var(--ink); border-color:var(--gold-dim); background:var(--bg-2); }
+footer.bottom .social-links a svg{ flex-shrink:0; }
+
+.help-list{margin:0; padding-left:18px; font-size:12.5px; color:var(--ink-dim); line-height:1.7;}
+.help-list code{background:var(--bg-3); padding:1px 6px; border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--gold-bright);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="titles" style="display:flex;flex-direction:row;align-items:center;gap:14px;">
+      <div class="brand-mark">
+        <svg width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="bgGrad" cx="50%" cy="40%" r="55%">
+              <stop offset="0%" stop-color="#4a9fd4"/>
+              <stop offset="100%" stop-color="#1a3a6e"/>
+            </radialGradient>
+            <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#c8e8ff" stop-opacity="0.9"/>
+              <stop offset="60%" stop-color="#7ab8e8" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="#2a6aaa" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="1.2" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- Fondo -->
+          <circle cx="22" cy="22" r="20" fill="url(#bgGrad)"/>
+          <circle cx="22" cy="22" r="20" fill="none" stroke="#5ab0e0" stroke-width="0.8" opacity="0.6"/>
+          <!-- Rune/snowflake WotLK style -->
+          <g filter="url(#glow)" fill="#d8f0ff" opacity="0.95">
+            <!-- Cruz central -->
+            <rect x="21" y="7" width="2" height="30" rx="1"/>
+            <rect x="7" y="21" width="30" height="2" rx="1"/>
+            <!-- Diagonales -->
+            <rect x="21" y="7" width="2" height="30" rx="1" transform="rotate(45 22 22)"/>
+            <rect x="21" y="7" width="2" height="30" rx="1" transform="rotate(-45 22 22)"/>
+            <!-- Brazos: marcas horizontales cortas en la cruz principal -->
+            <rect x="14" y="11.5" width="6" height="1.5" rx="0.7" transform="rotate(-45 22 22)"/>
+            <rect x="24" y="11.5" width="6" height="1.5" rx="0.7" transform="rotate(-45 22 22)"/>
+            <rect x="14" y="31" width="6" height="1.5" rx="0.7" transform="rotate(-45 22 22)"/>
+            <rect x="24" y="31" width="6" height="1.5" rx="0.7" transform="rotate(-45 22 22)"/>
+
+            <rect x="14" y="11.5" width="6" height="1.5" rx="0.7" transform="rotate(45 22 22)"/>
+            <rect x="24" y="11.5" width="6" height="1.5" rx="0.7" transform="rotate(45 22 22)"/>
+            <rect x="14" y="31" width="6" height="1.5" rx="0.7" transform="rotate(45 22 22)"/>
+            <rect x="24" y="31" width="6" height="1.5" rx="0.7" transform="rotate(45 22 22)"/>
+          </g>
+          <!-- Centro -->
+          <circle cx="22" cy="22" r="3.5" fill="#e8f6ff" opacity="0.95" filter="url(#glow)"/>
+          <circle cx="22" cy="22" r="2" fill="#ffffff"/>
+          <!-- Brillo superior -->
+          <ellipse cx="19" cy="16" rx="5" ry="3" fill="url(#glowGrad)" opacity="0.35"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Creador de NPCBots</h1>
+        <p>AzerothCore 3.3.5a (WotLK) - genera el SQL para <strong>mod-npcbots</strong> (Azerothcore/Trinity-Bots)</p>
+      </div>
+    </div>
+    <span class="tag">creature_template · creature_template_model · creature_template_npcbot_extras · creature_template_npcbot_appearance</span>
+  </header>
+
+  <div class="layout">
+    <div>
+
+      <section class="panel">
+        <h2><span class="num">1</span>Clase del bot</h2>
+        <p class="sub">Las clases vienen directamente del enum <strong>BotClasses</strong> del mod. Las clases <strong>heroe</strong> tienen raza fija y aspecto no personalizable.</p>
+        <div class="class-grid" id="classGrid"></div>
+
+        <label class="hero-toggle">
+          <input type="checkbox" id="toggleHero">
+          Mostrar clases heroe avanzadas (Archimago, Senor del Terror, Cazadora Oscura...)
+        </label>
+        <div class="class-grid" id="heroGrid" style="display:none; margin-top:10px;"></div>
+        <div class="hero-note" id="heroNote" style="display:none;"></div>
+      </section>
+
+      <section class="panel">
+        <h2><span class="num">2</span>Raza, genero y apariencia</h2>
+        <p class="sub" id="raceSubtitle">Elige una clase primero.</p>
+
+        <div id="standardAppearance" style="display:none;">
+
+          <label class="hero-toggle" style="margin-bottom:10px;">
+            <input type="checkbox" id="toggleAllRaces">
+            <span>⚗️ Desbloquear todas las razas <span style="color:var(--bad);font-weight:700;">(modo experimental)</span></span>
+          </label>
+          <div class="note bad" id="allRacesWarn" style="display:none; margin-bottom:14px;">
+            <strong>⚠️ ADVERTENCIA:</strong> Estás usando una combinación raza/clase <strong>no oficial</strong> (por ejemplo, Enano Chamán o Gnomo Druida). El mod puede no tener sprites, animaciones ni lógica de habilidades preparados para esta combinación. <strong>Ejecutar este SQL puede causar errores en el servidor, comportamientos impredecibles en el bot o corrupción de datos en tu base de datos.</strong> Asegúrate de tener una copia de seguridad antes de continuar.
+          </div>
+
+          <div class="row">
+            <div class="field" style="flex:1; min-width:260px;">
+              <label>Raza</label>
+              <div class="race-grid" id="raceGrid"></div>
+            </div>
+            <div class="field">
+              <label>Genero</label>
+              <div class="gender-toggle">
+                <button type="button" class="gender-btn" data-g="0">Masculino</button>
+                <button type="button" class="gender-btn" data-g="1">Femenino</button>
+              </div>
+              <label style="margin-top:10px;">Variante de voz / modelo</label>
+              <select id="soundVariant">
+                <option value="0">Variante 1</option>
+                <option value="1">Variante 2</option>
+                <option value="2">Variante 3</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="sliders" id="sliders"></div>
+        </div>
+
+        <div id="fixedAppearance" style="display:none;">
+          <div class="fixed-appearance-box" id="fixedAppearanceText"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2><span class="num">3</span>Identidad del NPC</h2>
+        <p class="sub">Nombre, nivel, faccion y el <strong>ScriptName</strong> que veras en <code style="background:var(--bg-3);padding:1px 5px;border-radius:4px;">creature_template</code>.</p>
+
+        <div class="row">
+          <div class="field" style="flex:1; min-width:180px;">
+            <label>Nombre del bot</label>
+            <input type="text" id="fName" placeholder="Ej: Llanea" value="Llanea">
+          </div>
+          <div class="field" style="flex:1; min-width:180px;">
+            <label>Subtitulo (subname)</label>
+            <input type="text" id="fSubname" placeholder="Ej: Warrior Bot">
+          </div>
+          <div class="field" style="min-width:160px;">
+            <label>ID de entrada (entry)</label>
+            <input type="number" id="fEntry" value="380001">
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label>Nivel minimo</label>
+            <input type="number" id="fMinLevel" value="80" min="1" max="83" style="width:90px;">
+          </div>
+          <div class="field">
+            <label>Nivel maximo</label>
+            <input type="number" id="fMaxLevel" value="80" min="1" max="83" style="width:90px;">
+          </div>
+          <div class="field">
+            <label>Faccion</label>
+            <select id="fFaction">
+              <option value="35" selected>Amistosa con todos (35) - por defecto del mod</option>
+              <option value="1802">Alianza (1802)</option>
+              <option value="1801">Horda (1801)</option>
+              <option value="14">Hostil con todos (14)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Oro min. / max. al morir</label>
+            <div style="display:flex; gap:6px;">
+              <input type="number" id="fMinGold" value="0" style="width:78px;">
+              <input type="number" id="fMaxGold" value="0" style="width:78px;">
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field" style="flex:1; min-width:220px;">
+            <label style="color: #ff8a7a; font-weight: bold;">ScriptName (OBLIGATORIO)</label>
+            <select id="fScriptName">
+              <option value="warrior_bot">warrior_bot</option>
+              <option value="mage_bot">mage_bot</option>
+              <option value="shaman_bot">shaman_bot</option>
+              <option value="priest_bot">priest_bot</option>
+              <option value="hunter_bot">hunter_bot</option>
+              <option value="rogue_bot">rogue_bot</option>
+              <option value="warlock_bot">warlock_bot</option>
+              <option value="paladin_bot">paladin_bot</option>
+              <option value="druid_bot">druid_bot</option>
+              <option value="death_knight_bot">death_knight_bot</option>
+              <option value="blademaster_bot">blademaster_bot</option>
+              <option value="sphynx_bot">sphynx_bot</option>
+              <option value="archmage_bot">archmage_bot</option>
+              <option value="dreadlord_bot">dreadlord_bot</option>
+              <option value="spellbreaker_bot">spellbreaker_bot</option>
+              <option value="darkranger_bot">darkranger_bot</option>
+              <option value="necromancer_bot">necromancer_bot</option>
+              <option value="seawitch_bot">seawitch_bot</option>
+              <option value="cryptlord_bot">cryptlord_bot</option>
+            </select>
+          </div>
+        </div>
+        <div class="note">
+          El <strong>ScriptName</strong> vinculará la criatura con la IA C++ del módulo. Asegúrate de elegir el script que corresponda con la clase del bot para un correcto funcionamiento.
+        </div>
+        <div class="note warn" id="entryWarn" style="display:none;"></div>
+
+        <details class="advanced">
+          <summary>Avanzado: rango, clase de stats y gossip</summary>
+          <div class="adv-grid">
+            <div class="field">
+              <label>Rango (rank)</label>
+              <select id="fRank">
+                <option value="0">Normal</option>
+                <option value="1">Elite</option>
+                <option value="2">Raro elite</option>
+                <option value="4">Raro</option>
+                <option value="3">Jefe de mundo</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>unit_class (tabla de stats)</label>
+              <select id="fUnitClass"></select>
+            </div>
+            <div class="field">
+              <label>gossip_menu_id</label>
+              <input type="number" id="fGossip" value="0">
+            </div>
+          </div>
+          <p class="note" style="margin-top:14px;">El resto de columnas (velocidades, detection_range, flags_extra, etc.) se rellenan con los valores estandar que usa el propio mod para sus NPCBots, igual que en tu archivo de ejemplo.</p>
+        </details>
+      </section>
+
+      <section class="panel">
+        <h2><span class="num">?</span>Como usar este SQL en tu servidor</h2>
+        <ol class="help-list">
+          <li>Haz una copia de seguridad de tu base <code>acore_world</code> antes de ejecutar nada.</li>
+          <li>Ejecuta el SQL generado contra la base <strong>world</strong> (con HeidiSQL, phpMyAdmin o consola de MySQL).</li>
+          <li>Reinicia el worldserver, o como GM ejecuta <code>.reload creature_template</code> / <code>.reload all</code>.</li>
+          <li>En el juego: <code>.npcbot lookup &lt;clase&gt;</code> para localizar tu bot por nombre y entry.</li>
+          <li><code>.npcbot spawn &lt;entry&gt;</code> en el mundo (no funciona dentro de instancias) para colocarlo donde estes parado.</li>
+        </ol>
+      </section>
+
+    </div>
+
+    <div class="sticky">
+
+      <div class="preview-card" id="previewCard">
+        <div class="preview-banner"></div>
+        <div class="preview-body">
+          <div class="preview-portrait" id="previewPortrait"></div>
+          <p class="preview-name" id="previewName">Llanea</p>
+          <p class="preview-sub" id="previewSub">Warrior Bot</p>
+          <div class="preview-badges" id="previewBadges"></div>
+          <p class="preview-disclaimer">Usa el visor de Wowhead para configurar y ver el aspecto exacto en 3D antes de fijar los números cosméticos.</p>
+          <div class="preview-link">
+            <a class="btn small" href="https://www.wowhead.com/wotlk/dressing-room" target="_blank" rel="noopener">Abrir visor WotLK en Wowhead</a>
+          </div>
+        </div>
+      </div>
+
+      <section class="panel" style="margin-top:20px;">
+        <h2 style="margin-bottom:14px;">SQL generado</h2>
+        <div id="sqlOutput"></div>
+        <div class="sql-actions">
+          <button class="btn primary" id="btnCopyAll">Copiar todo</button>
+          <button class="btn" id="btnDownload">Descargar .sql</button>
+          <button class="btn" id="btnSaveRoster">Guardar en mi lista</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 style="margin-bottom:12px;">Mis NPCBots creados</h2>
+        <div id="rosterList"><p class="roster-empty">Aun no has guardado ningun bot en esta lista.</p></div>
+        <div class="sql-actions" style="margin-top:12px; margin-bottom:0; display:flex; gap:8px;">
+          <button class="btn small" id="btnExportRoster">Exportar Lista (.json)</button>
+          <button class="btn small" id="btnImportRoster">Importar Lista</button>
+          <input type="file" id="fileImportRoster" style="display:none;" accept=".json">
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <footer class="bottom">
+    Datos de clases, razas, rangos de apariencia y CreatureDisplayID extraidos del codigo fuente de Trinity-Bots / AzerothCore-wotlk-with-NPCBots (rama <code style="background:var(--bg-3);padding:1px 5px;border-radius:4px;">npcbots_3.3.5</code>). Verifica siempre en tu propia base de datos antes de usar en produccion.
+    <div class="footer-credit">
+      <span class="by">Creado por</span>
+      <span class="author">Lleguito</span>
+      <div class="social-links">
+        <!-- YouTube -->
+        <a href="https://www.youtube.com/@Lleguito" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>
+          YouTube
+        </a>
+        <!-- GitHub -->
+        <a href="https://github.com/LleguitoWoW" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12c0 5.3 3.4 9.8 8.2 11.4.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17 4.7 18 5 18 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6C20.6 21.8 24 17.3 24 12c0-6.6-5.4-12-12-12z"/></svg>
+          GitHub
+        </a>
+        <!-- X / Twitter -->
+        <a href="https://x.com/LleguitoOficial" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.2 2h3.4l-7.4 8.5L23 22h-6.8l-5.3-7-6.1 7H1.4l7.9-9L1 2h7l4.8 6.3L18.2 2zm-1.2 18h1.9L7.1 4H5.1l11.9 16z"/></svg>
+          X / Twitter
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+/* =========================================================================
+   DATA - extracted from the mod-npcbots C++ source (botcommands.cpp / botcommon.h)
+   ========================================================================= */
+
+const CLASSES = [
+  {id:1,  key:'warrior',  name:'Guerrero',               color:'#C79C6E', role:'Cuerpo a cuerpo', unitClass:1, hero:false, icon:'class_warrior', script:'warrior_bot'},
+  {id:2,  key:'paladin',  name:'Paladin',                color:'#F58CBA', role:'Hibrido',         unitClass:2, hero:false, icon:'class_paladin', script:'paladin_bot'},
+  {id:3,  key:'hunter',   name:'Cazador',                color:'#ABD473', role:'A distancia',     unitClass:3, hero:false, icon:'class_hunter', script:'hunter_bot'},
+  {id:4,  key:'rogue',    name:'Picaro',                 color:'#FFF569', role:'Cuerpo a cuerpo', unitClass:4, hero:false, icon:'class_rogue', script:'rogue_bot'},
+  {id:5,  key:'priest',   name:'Sacerdote',               color:'#E9E9E9', role:'Soporte / cura',  unitClass:5, hero:false, icon:'class_priest', script:'priest_bot'},
+  {id:6,  key:'dk',       name:'Caballero de la Muerte',  color:'#C41F3B', role:'Cuerpo a cuerpo', unitClass:6, hero:false, icon:'spell_deathknight_classicon', script:'death_knight_bot'},
+  {id:7,  key:'shaman',   name:'Chaman',                  color:'#2E8FE0', role:'Hibrido',         unitClass:7, hero:false, icon:'class_shaman', script:'shaman_bot'},
+  {id:8,  key:'mage',     name:'Mago',                    color:'#69CCF0', role:'A distancia',     unitClass:8, hero:false, icon:'class_mage', script:'mage_bot'},
+  {id:9,  key:'warlock',  name:'Brujo',                   color:'#9482C9', role:'A distancia',     unitClass:9, hero:false, icon:'class_warlock', script:'warlock_bot'},
+  {id:11, key:'druid',    name:'Druida',                  color:'#FF7D0A', role:'Hibrido',         unitClass:11,hero:false, icon:'class_druid', script:'druid_bot'},
+
+  {id:12, key:'bm',        name:'Maestro de Hojas',         color:'#A10015', role:'Heroe · cuerpo a cuerpo', unitClass:1, hero:true, disabled:true, icon:'ability_warrior_blademaster',
+    forcedRace:15, forcedRaceLabel:'Esqueleto (modelo especial, no es una raza jugable)', rank:4, script:'blademaster_bot',
+    desc:'Deshabilitada en la ultima version del mod (problemas con la animacion de golpe critico tras cambios en el motor de movimiento).'},
+  {id:13, key:'sphynx',    name:'Destructor de Obsidiana',  color:'#8A4FD1', role:'Heroe · soporte/tanque', unitClass:8, hero:true, icon:'inv_pet_obsidianstatue',
+    forcedRace:15, forcedRaceLabel:'Esqueleto (modelo especial, no es una raza jugable)', rank:2, script:'sphynx_bot',
+    desc:'Listada como "Sphynx" en el codigo. Muy resistente, dispersa magia, cura y hace de tanque a la vez.'},
+  {id:14, key:'archmage',  name:'Archimago',                color:'#028A99', role:'Heroe · a distancia', unitClass:8, hero:true, icon:'spell_holy_magicalsentry',
+    forcedRace:1, forcedRaceLabel:'Humano (unica raza permitida para esta clase)', rank:4, customizable:true, script:'archmage_bot',
+    desc:'Es la unica clase heroe con aspecto personalizable - pero su raza siempre es Humano.'},
+  {id:15, key:'dreadlord',  name:'Senor del Terror',         color:'#7A5C92', role:'Heroe · cuerpo a cuerpo', unitClass:1, hero:true, icon:'spell_shadow_vampiricaura',
+    forcedRace:15, forcedRaceLabel:'Esqueleto (modelo especial, no es una raza jugable)', rank:2, script:'dreadlord_bot',
+    desc:'Muy util en grupos grandes con mucho cuerpo a cuerpo gracias a su aura vampirica.'},
+  {id:16, key:'spellbreaker', name:'Rompehechizos',          color:'#CF3C1F', role:'Heroe · cuerpo a cuerpo', unitClass:1, hero:true, icon:'inv_shield_19',
+    forcedRace:15, forcedRaceLabel:'Esqueleto (modelo especial, no es una raza jugable)', rank:4, script:'spellbreaker_bot',
+    desc:'Clase de soporte puro, roba/quema mana en combate cuerpo a cuerpo.'},
+  {id:17, key:'darkranger', name:'Cazadora Oscura',          color:'#6A4FA8', role:'Heroe · a distancia', unitClass:3, hero:true, icon:'spell_shadow_darksummoning',
+    forcedRace:10, forcedRaceLabel:'Elfo de Sangre (unica raza permitida para esta clase)', rank:2, script:'darkranger_bot',
+    desc:'No-muerta, genera muy poco aggro y tiene un Silencio de cooldown muy corto.'},
+  {id:18, key:'necromancer', name:'Nigromante',              color:'#9900CC', role:'Heroe · a distancia', unitClass:8, hero:true, icon:'spell_shadow_raisedead',
+    forcedRace:1, forcedRaceLabel:'Humano (unica raza permitida para esta clase)', rank:1, script:'necromancer_bot',
+    desc:'Invoca esqueletos y explota cadaveres. Clase principalmente de soporte.'},
+  {id:19, key:'seawitch', name:'Bruja Marina Naga',          color:'#33B79A', role:'Heroe · a distancia', unitClass:8, hero:true, icon:'inv_misc_nagahead',
+    forcedRace:13, forcedRaceLabel:'Naga (modelo especial, no es una raza jugable)', rank:2, script:'seawitch_bot',
+    desc:'Versatil a distancia, muy resistente y con control de masas (Tornado).'},
+  {id:20, key:'cryptlord', name:'Senor de las Criptas',      color:'#19782B', role:'Heroe · cuerpo a cuerpo', unitClass:1, hero:true, icon:'spell_nature_metamorphosis',
+    forcedRace:15, forcedRaceLabel:'Esqueleto (modelo especial, no es una raza jugable)', rank:2, script:'cryptlord_bot',
+    desc:'Buen tanque cuerpo a cuerpo, invoca escarabajos desde los cadaveres.'},
+];
+
+const RACES = [
+  {id:1,  name:'Humano',          faction:'alliance'},
+  {id:2,  name:'Orco',            faction:'horde'},
+  {id:3,  name:'Enano',           faction:'alliance'},
+  {id:4,  name:'Elfo de la Noche',faction:'alliance'},
+  {id:5,  name:'No-muerto',       faction:'horde'},
+  {id:6,  name:'Tauren',          faction:'horde'},
+  {id:7,  name:'Gnomo',           faction:'alliance'},
+  {id:8,  name:'Trol',            faction:'horde'},
+  {id:10, name:'Elfo de Sangre',  faction:'horde'},
+  {id:11, name:'Draenei',         faction:'alliance'},
+];
+
+const RACE_CLASS_ALLOWED = {
+  1:  [1,2,4,5,6,8,9],      // Humano
+  2:  [1,3,4,6,7,9],        // Orco
+  3:  [1,2,3,4,5,6],        // Enano
+  4:  [1,3,4,5,6,11],       // Elfo de la Noche
+  5:  [1,4,5,6,8,9],        // No-muerto
+  6:  [1,3,6,7,11],         // Tauren
+  7:  [1,4,6,8,9],          // Gnomo
+  8:  [1,3,4,5,6,7,8],      // Trol
+  10: [2,3,4,5,6,8,9],      // Elfo de Sangre
+  11: [1,2,3,5,6,7,8],      // Draenei
+};
+
+const VISUALS = {
+  1:  {skin:[9,9],   face:[11,14], hair:[16,23], haircolor:9, feat:[8,6]},   // Human
+  3:  {skin:[8,8],   face:[9,9],   hair:[15,18], haircolor:9, feat:[10,5]},  // Dwarf
+  4:  {skin:[8,8],   face:[8,8],   hair:[11,11], haircolor:7, feat:[5,9]},   // Night Elf
+  7:  {skin:[4,4],   face:[6,6],   hair:[11,11], haircolor:8, feat:[7,6]},   // Gnome
+  11: {skin:[13,13], face:[9,9],   hair:[13,15], haircolor:6, feat:[7,6]},   // Draenei
+  2:  {skin:[8,8],   face:[8,8],   hair:[11,12], haircolor:7, feat:[10,6]},  // Orc
+  5:  {skin:[5,5],   face:[9,9],   hair:[14,14], haircolor:9, feat:[16,7]},  // Undead
+  6:  {skin:[18,10], face:[4,3],   hair:[12,11], haircolor:2, feat:[6,4]},   // Tauren
+  8:  {skin:[5,5],   face:[4,5],   hair:[9,9],   haircolor:9, feat:[10,5]},  // Troll
+  10: {skin:[9,9],   face:[9,9],   hair:[15,18], haircolor:9, feat:[9,10]},  // Blood Elf
+};
+
+const MODELS = {
+  1:  [[1492,1290,1699],   [1295,1296,1297]],
+  3:  [[1280,1354,1362],   [1286,1407,2585]],
+  4:  [[1285,1704,1706],   [1681,1682,1719]],
+  7:  [[1832,4287,4717],   [3124,5378,3108]],
+  11: [[16226,16589,16224],[16222,16202,16636]],
+  2:  [[1275,1326,1368],   [1325,1868,1874]],
+  5:  [[1278,1562,1578],   [1592,1593,1603]],
+  6:  [[2083,2087,2096],   [2113,2112,2127]],
+  8:  [[3608,4047,4068],   [4085,4231,4524]],
+  10: [[15532,16700,16699],[15514,15518,15520]],
+};
+
+const RACE_SKIN_HEX = {
+  1:['#e7c2a0','#caa67e','#a9805c','#8a6342','#6e4d33','#5a3e29','#4a3120','#3c281a','#2e1f15','#241710'],
+  3:['#e0b89a','#caa080','#b08862','#946e4c'],
+  4:['#9fc3e8','#7fa7d6','#bba0e0','#8f7fc9'],
+  7:['#e8d2bb','#c9ad8a'],
+  11:['#7fb7c9','#5e93a8','#8a7fc0','#4a6e9c'],
+  2:['#9bc06a','#7fa14e','#5f8a3c','#4d7430'],
+  5:['#9bb08a','#7f9670','#6c8260','#56664c'],
+  6:['#a98a64','#8a6f4e','#6e5a40','#5c4933'],
+  8:['#8aa7c9','#6f8fb0','#4a6e94','#3c5a7a'],
+  10:['#e8c9a0','#d4ad7c','#cfa888','#b88e6c'],
+};
+const HAIR_HEX = ['#1a1a1a','#3b2a1a','#5c3a1e','#8a5a2e','#b8862e','#d9b04a','#c9c9c9','#e0e0e0','#7a2e2e','#2e3a7a'];
+
+const COSMETIC_DEFS = [
+  {key:'skin', label:'Color de Piel', field:'skin'},
+  {key:'face', label:'Tipo de Rostro', field:'face'},
+  {key:'hair', label:'Estilo de Peinado', field:'hair'},
+  {key:'haircolor', label:'Color de Cabello', field:'haircolor'},
+  {key:'features', label:'Rasgos Faciales', field:'feat'},
+];
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+const state = {
+  classId: 1,
+  showHero: false,
+  allRaces: false,
+  raceId: 1,
+  gender: 0,
+  skin: 3, face: 0, hair: 1, haircolor: 1, features: 6,
+  soundVariant: 0,
+  name: 'Llanea',
+  subname: '',
+  entry: 380001,
+  minlevel: 80, maxlevel: 80,
+  faction: 35,
+  mingold: 0, maxgold: 0,
+  scriptname: 'warrior_bot',
+  rank: 0,
+  unitClassOverride: null,
+  gossip: 0,
+};
+
+function getClass(id){ return CLASSES.find(c=>c.id===id); }
+function esc(s){ return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+/* =========================================================================
+   RENDER: class grid (Wowhead CDN integration)
+   ========================================================================= */
+function renderClassGrids(){
+  const std = CLASSES.filter(c=>!c.hero);
+  const hero = CLASSES.filter(c=>c.hero);
+
+  document.getElementById('classGrid').innerHTML = std.map(c => `
+    <div class="class-card ${state.classId===c.id?'selected':''}" style="--ccolor:${c.color}" data-class="${c.id}">
+      <div class="swatch">
+         <img src="https://wow.zamimg.com/images/wow/icons/medium/${c.icon}.jpg" alt="${c.name}">
+      </div>
+      <div class="cname">${c.name}</div>
+    </div>`).join('');
+
+  document.getElementById('heroGrid').innerHTML = hero.map(c => `
+    <div class="class-card ${state.classId===c.id?'selected':''} ${c.disabled?'disabled':''}" style="--ccolor:${c.color}" data-class="${c.id}" data-disabled="${!!c.disabled}">
+      ${c.disabled?'<span class="tagdisabled">deshabilitada</span>':''}
+      <div class="swatch">
+         <img src="https://wow.zamimg.com/images/wow/icons/medium/${c.icon}.jpg" alt="${c.name}">
+      </div>
+      <div class="cname">${c.name}</div>
+    </div>`).join('');
+
+  document.querySelectorAll('#classGrid .class-card, #heroGrid .class-card').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      if(el.dataset.disabled === 'true') return;
+      state.classId = Number(el.dataset.class);
+      onClassChanged();
+    });
+  });
+
+  const heroNote = document.getElementById('heroNote');
+  const heroSel = getClass(state.classId);
+  if(heroSel && heroSel.hero){
+    heroNote.style.display='block';
+    heroNote.innerHTML = `<b style="color:var(--gold-bright)">${heroSel.name}</b> - ${heroSel.desc||''}`;
+  } else {
+    heroNote.style.display='none';
+  }
+}
+
+function onClassChanged(){
+  const c = getClass(state.classId);
+  const subnameEl = document.getElementById('fSubname');
+  const currentVal = subnameEl.value.trim();
+  // Se considera "editado por el usuario" solo si el valor actual no coincide
+  // con ningún patrón automático "[NombreClase] Bot" de las clases existentes
+  const isAutoGenerated = CLASSES.some(cls => currentVal === cls.name + ' Bot') || currentVal === '';
+  if(isAutoGenerated){
+    subnameEl.value = c.name + ' Bot';
+    state.subname = c.name + ' Bot';
+    delete subnameEl.dataset.userEdited;
+  }
+  if(c.hero && c.forcedRace){
+    state.raceId = c.forcedRace;
+  }
+  
+  if(c.script) {
+    document.getElementById('fScriptName').value = c.script;
+  }
+
+  populateUnitClassSelect();
+  renderClassGrids();
+  renderAppearanceSection();
+  renderAll();
+}
+
+/* =========================================================================
+   RENDER: race + appearance section
+   ========================================================================= */
+function renderAppearanceSection(){
+  const c = getClass(state.classId);
+  const subtitle = document.getElementById('raceSubtitle');
+  const stdBox = document.getElementById('standardAppearance');
+  const fixedBox = document.getElementById('fixedAppearance');
+
+  if(!c.hero){
+    subtitle.innerHTML = `Clase <b style="color:${c.color}">${c.name}</b> - elige cualquier combinacion valida de raza y genero para 3.3.5.`;
+    stdBox.style.display='block';
+    fixedBox.style.display='none';
+    renderRaceGrid();
+    renderGenderToggle();
+    renderSliders();
+  } else if(c.customizable){
+    subtitle.innerHTML = `<b style="color:${c.color}">${c.name}</b> tiene aspecto personalizable, pero su raza siempre es <b>${c.forcedRaceLabel}</b>.`;
+    stdBox.style.display='block';
+    fixedBox.style.display='none';
+    state.raceId = c.forcedRace;
+    renderRaceGrid(true);
+    renderGenderToggle();
+    renderSliders();
+  } else {
+    subtitle.innerHTML = `<b style="color:${c.color}">${c.name}</b> no tiene apariencia configurable.`;
+    stdBox.style.display='none';
+    fixedBox.style.display='block';
+    document.getElementById('fixedAppearanceText').innerHTML =
+      `Esta clase heroe herea su modelo y atuendo de un NPCBot ya existente de la misma clase, igual que hace el comando interno <code>.npcbot createnew</code>. ` +
+      `Raza interna asignada: <b>${c.forcedRaceLabel}</b>. No se generara una fila en <code>creature_template_npcbot_appearance</code> para este bot (igual que hace el mod).`;
+  }
+}
+
+function renderRaceGrid(forceLocked){
+  const allowed = RACE_CLASS_ALLOWED;
+  document.getElementById('raceGrid').innerHTML = RACES.map(r=>{
+    let valid, isForced;
+    if(forceLocked){
+      valid = r.id === state.raceId;
+      isForced = !valid;
+    } else if(state.allRaces){
+      valid = true;
+      isForced = false;
+    } else {
+      valid = !!(allowed[r.id]?.includes(state.classId));
+      isForced = false;
+    }
+    const selected = state.raceId===r.id;
+    const incompatible = state.allRaces && !forceLocked && !(allowed[r.id]?.includes(state.classId));
+    return `<div class="race-pill ${r.faction} ${selected?'selected':''} ${(!valid || isForced)?'invalid':''}"
+                 data-race="${r.id}"
+                 title="${incompatible?'⚠️ Combinación no oficial — puede causar errores':(!valid?'No disponible para esta clase en 3.3.5':'')}">
+              ${r.name}${incompatible?'<span style="color:var(--bad);font-size:8px;display:block;">⚠ no oficial</span>':''}
+              <span class="fac">${r.faction==='alliance'?'Alianza':'Horda'}</span>
+            </div>`;
+  }).join('');
+  if(!forceLocked){
+    document.querySelectorAll('.race-pill').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        if(el.classList.contains('invalid')) return;
+        state.raceId = Number(el.dataset.race);
+        clampVisuals();
+        renderRaceGrid();
+        renderSliders();
+        renderAll();
+      });
+    });
+  }
+}
+
+function renderGenderToggle(){
+  document.querySelectorAll('.gender-btn').forEach(btn=>{
+    btn.classList.toggle('selected', Number(btn.dataset.g)===state.gender);
+    btn.onclick = () => { state.gender = Number(btn.dataset.g); clampVisuals(); renderGenderToggle(); renderSliders(); renderAll(); };
+  });
+  document.getElementById('soundVariant').value = state.soundVariant;
+}
+
+function maxFor(field){
+  const v = VISUALS[state.raceId];
+  if(!v) return 0;
+  if(field==='haircolor') return v.haircolor;
+  return v[field][state.gender];
+}
+
+function clampVisuals(){
+  COSMETIC_DEFS.forEach(d => {
+    state[d.key] = Math.min(state[d.key], maxFor(d.field));
+  });
+}
+
+function renderSliders(){
+  document.getElementById('sliders').innerHTML = COSMETIC_DEFS.map(d=>{
+    const max = maxFor(d.field);
+    const val = state[d.key];
+    return `
+    <div class="cosmetic-option">
+      <span class="cosmetic-label">${d.label}</span>
+      <div class="cosmetic-controls">
+        <button type="button" class="btn small cosmetic-btn" onclick="stepVisual('${d.key}', -1)">◀</button>
+        <span class="cosmetic-val">${val} / ${max}</span>
+        <button type="button" class="btn small cosmetic-btn" onclick="stepVisual('${d.key}', 1)">▶</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.stepVisual = function(key, delta) {
+  const d = COSMETIC_DEFS.find(x => x.key === key);
+  const max = maxFor(d.field);
+  let val = state[key] + delta;
+  if (val < 0) val = max;
+  if (val > max) val = 0;
+  state[key] = val;
+  renderSliders();
+  renderAll();
+};
+
+/* =========================================================================
+   unit_class select (advanced)
+   ========================================================================= */
+function populateUnitClassSelect(){
+  const opts = [1,2,3,4,5,6,7,8,9,11];
+  const names = {1:'Guerrero',2:'Paladin',3:'Cazador',4:'Picaro',5:'Sacerdote',6:'Caballero de la Muerte',7:'Chaman',8:'Mago',9:'Brujo',11:'Druida'};
+  const sel = document.getElementById('fUnitClass');
+  const c = getClass(state.classId);
+  sel.innerHTML = opts.map(o=>`<option value="${o}" ${o===c.unitClass?'selected':''}>${o} - ${names[o]}</option>`).join('');
+  document.getElementById('fRank').value = c.rank ?? 0;
+}
+
+/* =========================================================================
+   PREVIEW (Icono de clase integrado)
+   ========================================================================= */
+function renderPreview(){
+  const c = getClass(state.classId);
+  const isHero = c.hero;
+  const customizable = !isHero || c.customizable;
+  const raceId = isHero ? c.forcedRace : state.raceId;
+
+  document.documentElement.style.setProperty('--ccolor', c.color);
+  document.getElementById('previewCard').style.setProperty('--ccolor', c.color);
+
+  // Reemplazo del avatar por el icono de Wowhead
+  document.getElementById('previewPortrait').innerHTML = `<img src="https://wow.zamimg.com/images/wow/icons/large/${c.icon}.jpg" alt="${c.name}">`;
+
+  document.getElementById('previewName').textContent = state.name || '(sin nombre)';
+  document.getElementById('previewSub').textContent = state.subname || (c.name + ' Bot');
+
+  const raceName = (RACES.find(r=>r.id===raceId)||{}).name || c.forcedRaceLabel || '-';
+  const genderName = customizable ? (state.gender===0?'Masculino':'Femenino') : '-';
+  document.getElementById('previewBadges').innerHTML = `
+    <span class="badge cclass">${c.name}</span>
+    <span class="badge">${raceName}</span>
+    <span class="badge">${genderName}</span>
+    <span class="badge">Nivel ${state.minlevel===state.maxlevel?state.minlevel:(state.minlevel+'-'+state.maxlevel)}</span>
+    <span class="badge">Entry ${state.entry}</span>
+  `;
+}
+
+/* =========================================================================
+   SQL GENERATION WITH PRE-DELETE CLEANUP
+   ========================================================================= */
+function highlightSQL(sql){
+  return sql
+    .replace(/`([^`]+)`/g, '<span class="kw">`$1`</span>')
+    .replace(/'((?:[^'\\]|\\.)*)'/g, '<span class="str">\'$1\'</span>')
+    .replace(/\b(INSERT INTO|DELETE FROM|VALUES|WHERE|SET FOREIGN_KEY_CHECKS)\b/g, '<span class="kw">$1</span>')
+    .replace(/(?<![\w'`])(-?\d+(\.\d+)?)(?![\w'`])/g, '<span class="num">$1</span>');
+}
+
+function buildSQL(){
+  const c = getClass(state.classId);
+  const isHero = c.hero;
+  const customizable = !isHero || c.customizable;
+  const raceId = isHero ? c.forcedRace : state.raceId;
+  const unitClass = state.unitClassOverride ?? c.unitClass;
+  const rank = state.rank;
+  const entry = state.entry;
+  const name = esc(state.name);
+  const subname = esc(state.subname || (c.name + ' Bot'));
+  const scriptname = esc(state.scriptname);
+
+  let displayId = 0;
+  if(customizable && MODELS[raceId]){
+    displayId = MODELS[raceId][state.gender][state.soundVariant];
+  }
+
+  const blocks = [];
+
+  // --- BLOQUE DE SEGURIDAD (DELETE) ---
+  let sqlClean = `-- Limpieza de registros previos para evitar errores de claves duplicadas\n`;
+  sqlClean += `DELETE FROM \`creature_template\` WHERE \`entry\` = ${entry};\n`;
+  if(displayId > 0){
+    sqlClean += `DELETE FROM \`creature_template_model\` WHERE \`CreatureID\` = ${entry};\n`;
+  }
+  sqlClean += `DELETE FROM \`creature_template_npcbot_extras\` WHERE \`entry\` = ${entry};\n`;
+  if(customizable){
+    sqlClean += `DELETE FROM \`creature_template_npcbot_appearance\` WHERE \`entry\` = ${entry};\n`;
+  }
+  // Añadimos la limpieza del equipamiento obligatorio
+  sqlClean += `DELETE FROM \`creature_equip_template\` WHERE \`CreatureID\` = ${entry} AND \`ID\` = 1;`;
+
+  blocks.push({
+    title: 'Limpieza automática de ID (Ejecución segura)',
+    sql: sqlClean
+  });
+
+  // --- TABLA: creature_template ---
+  blocks.push({
+    title: 'creature_template',
+    sql:
+`INSERT INTO \`creature_template\` (\`entry\`, \`difficulty_entry_1\`, \`difficulty_entry_2\`, \`difficulty_entry_3\`, \`KillCredit1\`, \`KillCredit2\`, \`name\`, \`subname\`, \`IconName\`, \`gossip_menu_id\`, \`minlevel\`, \`maxlevel\`, \`exp\`, \`faction\`, \`npcflag\`, \`speed_walk\`, \`speed_run\`, \`speed_swim\`, \`speed_flight\`, \`detection_range\`, \`rank\`, \`dmgschool\`, \`DamageModifier\`, \`BaseAttackTime\`, \`RangeAttackTime\`, \`BaseVariance\`, \`RangeVariance\`, \`unit_class\`, \`unit_flags\`, \`unit_flags2\`, \`dynamicflags\`, \`family\`, \`type\`, \`type_flags\`, \`lootid\`, \`pickpocketloot\`, \`skinloot\`, \`PetSpellDataId\`, \`VehicleId\`, \`mingold\`, \`maxgold\`, \`AIName\`, \`MovementType\`, \`HoverHeight\`, \`HealthModifier\`, \`ManaModifier\`, \`ArmorModifier\`, \`ExperienceModifier\`, \`RacialLeader\`, \`movementId\`, \`RegenHealth\`, \`CreatureImmunitiesId\`, \`flags_extra\`, \`ScriptName\`, \`VerifiedBuild\`) VALUES 
+(${entry}, 0, 0, 0, 0, 0, '${name}', '${subname}', '', 0, ${state.minlevel}, ${state.maxlevel}, 2, ${state.faction}, 1, 1, 1, 1, 1, 20, ${rank}, 0, 1, 3400, 2000, 1, 1, ${unitClass}, 0, 32, 0, 0, 7, 4096, 0, 0, 0, 0, 0, ${state.mingold}, ${state.maxgold}, '', 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 2383413360, '${scriptname}', -1);`
+  });
+
+  // --- TABLA: creature_template_model ---
+  if(displayId > 0){
+    blocks.push({
+      title: 'creature_template_model',
+      sql: `INSERT INTO \`creature_template_model\` (\`CreatureID\`, \`Idx\`, \`CreatureDisplayID\`, \`DisplayScale\`, \`Probability\`, \`VerifiedBuild\`) VALUES (${entry}, 0, ${displayId}, 1, 1, 0);`
+    });
+  }
+
+  // --- TABLA: creature_equip_template (¡NUEVA!) ---
+  blocks.push({
+    title: 'creature_equip_template',
+    sql: `INSERT INTO \`creature_equip_template\` (\`CreatureID\`, \`ID\`, \`ItemID1\`, \`ItemID2\`, \`ItemID3\`, \`VerifiedBuild\`) VALUES (${entry}, 1, 2497, 0, 0, -1);`
+  });
+
+  // --- TABLA: creature_template_npcbot_extras ---
+  blocks.push({
+    title: 'creature_template_npcbot_extras',
+    sql: `INSERT INTO \`creature_template_npcbot_extras\` (\`entry\`, \`class\`, \`race\`) VALUES (${entry}, ${state.classId}, ${raceId});`
+  });
+
+  // --- TABLA: creature_template_npcbot_appearance ---
+  if(customizable){
+    blocks.push({
+      title: 'creature_template_npcbot_appearance',
+      sql: `INSERT INTO \`creature_template_npcbot_appearance\` (\`entry\`, \`name*\`, \`gender\`, \`skin\`, \`face\`, \`hair\`, \`haircolor\`, \`features\`) VALUES (${entry}, '${name}', ${state.gender}, ${state.skin}, ${state.face}, ${state.hair}, ${state.haircolor}, ${state.features});`
+    });
+  }
+
+  document.getElementById('sqlOutput').innerHTML = blocks.map(b => 
+    `<div class="sql-block">
+      <div class="sql-head">${b.title}</div>
+      <pre>${highlightSQL(b.sql)}</pre>
+    </div>`
+  ).join('');
+}
+
+/* =========================================================================
+   CONTROL DE FORMULARIO Y EVENTOS
+   ========================================================================= */
+function readInputs() {
+  state.name = document.getElementById('fName').value.trim();
+  state.subname = document.getElementById('fSubname').value.trim();
+  state.entry = parseInt(document.getElementById('fEntry').value) || 0;
+  state.minlevel = parseInt(document.getElementById('fMinLevel').value) || 1;
+  state.maxlevel = parseInt(document.getElementById('fMaxLevel').value) || 1;
+  state.faction = parseInt(document.getElementById('fFaction').value) || 35;
+  state.mingold = parseInt(document.getElementById('fMinGold').value) || 0;
+  state.maxgold = parseInt(document.getElementById('fMaxGold').value) || 0;
+  state.scriptname = document.getElementById('fScriptName').value;
+  state.rank = parseInt(document.getElementById('fRank').value) || 0;
+  
+  const customUnitClass = parseInt(document.getElementById('fUnitClass').value);
+  state.unitClassOverride = isNaN(customUnitClass) ? getClass(state.classId).unitClass : customUnitClass;
+  
+  state.gossip = parseInt(document.getElementById('fGossip').value) || 0;
+  state.soundVariant = parseInt(document.getElementById('soundVariant').value) || 0;
+}
+
+function renderAll() {
+  readInputs();
+  renderPreview();
+  buildSQL();
+  
+  const warn = document.getElementById('entryWarn');
+  if(state.entry > 0 && state.entry < 70000) {
+     warn.style.display = 'block';
+     warn.innerHTML = '<b>Aviso:</b> Los IDs por debajo de 70000 suelen estar reservados para criaturas oficiales de Blizzard. Es recomendable usar IDs altos (ej: 380001).';
+  } else {
+     warn.style.display = 'none';
+  }
+}
+
+const inputs = ['fName', 'fSubname', 'fEntry', 'fMinLevel', 'fMaxLevel', 'fFaction', 'fMinGold', 'fMaxGold', 'fScriptName', 'fRank', 'fUnitClass', 'fGossip', 'soundVariant'];
+inputs.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('input', () => {
+      renderAll();
+    });
+  }
+});
+
+document.getElementById('toggleHero').addEventListener('change', (e) => {
+  state.showHero = e.target.checked;
+  document.getElementById('heroGrid').style.display = state.showHero ? 'grid' : 'none';
+});
+
+document.getElementById('toggleAllRaces').addEventListener('change', (e) => {
+  state.allRaces = e.target.checked;
+  const warn = document.getElementById('allRacesWarn');
+  warn.style.display = state.allRaces ? 'block' : 'none';
+  // Si al desactivar la raza actual ya no es válida para la clase, volver a la primera válida
+  if(!state.allRaces){
+    const allowed = RACE_CLASS_ALLOWED;
+    if(!(allowed[state.raceId]?.includes(state.classId))){
+      const firstValid = RACES.find(r => allowed[r.id]?.includes(state.classId));
+      if(firstValid) state.raceId = firstValid.id;
+    }
+  }
+  renderRaceGrid();
+  renderSliders();
+  renderAll();
+});
+
+document.getElementById('btnCopyAll').addEventListener('click', () => {
+  const sqls = Array.from(document.querySelectorAll('.sql-block pre')).map(pre => pre.textContent).join('\n\n');
+  navigator.clipboard.writeText(sqls).then(() => {
+    const btn = document.getElementById('btnCopyAll');
+    const originalText = btn.innerHTML;
+    btn.textContent = 'Copiado!';
+    setTimeout(() => btn.innerHTML = originalText, 2000);
+  });
+});
+
+document.getElementById('btnDownload').addEventListener('click', () => {
+  const sqls = Array.from(document.querySelectorAll('.sql-block pre')).map(pre => pre.textContent).join('\n\n');
+  const blob = new Blob([sqls], {type: 'text/sql'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeName = (state.name || 'bot').replace(/\s+/g, '_').toLowerCase();
+  a.download = `npcbot_${state.entry}_${safeName}.sql`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* =========================================================================
+   ROSTER LOGIC WITH BROWSER STORAGE & FILE EXPORT/IMPORT
+   ========================================================================= */
+let savedBots = [];
+
+// Intentar cargar la lista desde LocalStorage al iniciar
+try {
+  const stored = localStorage.getItem('npc_saved_bots_roster');
+  if (stored) {
+    savedBots = JSON.parse(stored);
+  }
+} catch (e) {
+  console.error("Error al cargar la lista persistente:", e);
+}
+
+function saveToLocalStorage() {
+  try {
+    localStorage.setItem('npc_saved_bots_roster', JSON.stringify(savedBots));
+  } catch (e) {
+    console.error("Error al guardar en LocalStorage:", e);
+  }
+}
+
+function renderRoster() {
+  const roster = document.getElementById('rosterList');
+  if (savedBots.length === 0) {
+    roster.innerHTML = '<p class="roster-empty">Aun no has guardado ningun bot en esta lista.</p>';
+    return;
+  }
+  roster.innerHTML = savedBots.map(bot => `
+    <div class="roster-item" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:7px;">
+      <div onclick="loadBotFromRoster(${bot.id})" style="display:flex; align-items:center; gap:10px; min-width:0; cursor:pointer; flex:1;" title="Haz clic para cargar este bot en el editor">
+        <div class="dot" style="background:${bot.color}"></div>
+        <div class="info" style="min-width:0;">
+          <div class="n">${bot.name}</div>
+          <div class="m">Entry: ${bot.entry} [${bot.className}]</div>
+        </div>
+      </div>
+      <button class="btn small danger" onclick="deleteBot(${bot.id})" style="padding:4px 8px; font-family:'JetBrains Mono',monospace; margin-left:8px;">X</button>
+    </div>
+  `).join('');
+}
+
+window.deleteBot = function(id) {
+  if (confirm("¿Estás seguro de eliminar este bot de tu lista local?")) {
+    savedBots = savedBots.filter(bot => bot.id !== id);
+    saveToLocalStorage();
+    renderRoster();
+  }
+};
+
+window.loadBotFromRoster = function(id) {
+  const bot = savedBots.find(b => b.id === id);
+  if (!bot) return;
+
+  // Restaurar el estado completo de la configuracion
+  state.classId = bot.classId ?? 1;
+  state.raceId = bot.raceId ?? 1;
+  state.gender = bot.gender ?? 0;
+  state.skin = bot.skin ?? 0;
+  state.face = bot.face ?? 0;
+  state.hair = bot.hair ?? 0;
+  state.haircolor = bot.haircolor ?? 0;
+  state.features = bot.features ?? 0;
+  state.soundVariant = bot.soundVariant ?? 0;
+  
+  state.name = bot.name ?? '';
+  state.subname = bot.subname ?? '';
+  state.entry = bot.entry ?? 380001;
+  state.minlevel = bot.minlevel ?? 80;
+  state.maxlevel = bot.maxlevel ?? 80;
+  state.faction = bot.faction ?? 35;
+  state.mingold = bot.mingold ?? 0;
+  state.maxgold = bot.maxgold ?? 0;
+  state.scriptname = bot.scriptname ?? 'warrior_bot';
+  state.rank = bot.rank ?? 0;
+  state.gossip = bot.gossip ?? 0;
+
+  // Sincronizar el formulario visual (Inputs del DOM)
+  document.getElementById('fName').value = state.name;
+  document.getElementById('fSubname').value = state.subname;
+  document.getElementById('fEntry').value = state.entry;
+  document.getElementById('fMinLevel').value = state.minlevel;
+  document.getElementById('fMaxLevel').value = state.maxlevel;
+  document.getElementById('fFaction').value = state.faction;
+  document.getElementById('fMinGold').value = state.mingold;
+  document.getElementById('fMaxGold').value = state.maxgold;
+  document.getElementById('fScriptName').value = state.scriptname;
+  document.getElementById('fRank').value = state.rank;
+  document.getElementById('fGossip').value = state.gossip;
+  document.getElementById('soundVariant').value = state.soundVariant;
+
+  // Forzar refresco completo de la UI
+  populateUnitClassSelect();
+  renderClassGrids();
+  renderAppearanceSection();
+  renderAll();
+};
+
+document.getElementById('btnSaveRoster').addEventListener('click', () => {
+  const currentClass = getClass(state.classId);
+  
+  // Guardamos un clon estructurado del estado actual para poder recargarlo entero luego
+  savedBots.push({
+    id: Date.now(),
+    color: currentClass.color,
+    className: currentClass.name,
+    
+    // Configuracion guardada
+    classId: state.classId,
+    raceId: state.raceId,
+    gender: state.gender,
+    skin: state.skin,
+    face: state.face,
+    hair: state.hair,
+    haircolor: state.haircolor,
+    features: state.features,
+    soundVariant: state.soundVariant,
+    name: state.name,
+    subname: state.subname,
+    entry: state.entry,
+    minlevel: state.minlevel,
+    maxlevel: state.maxlevel,
+    faction: state.faction,
+    mingold: state.mingold,
+    maxgold: state.maxgold,
+    scriptname: state.scriptname,
+    rank: state.rank,
+    gossip: state.gossip
+  });
+  
+  saveToLocalStorage();
+  renderRoster();
+});
+
+// Exportar la lista de bots a un archivo de texto JSON descargable
+document.getElementById('btnExportRoster').addEventListener('click', () => {
+  if (savedBots.length === 0) {
+    alert('No hay bots en la lista para exportar.');
+    return;
+  }
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(savedBots, null, 2));
+  const downloadAnchor = document.createElement('a');
+  downloadAnchor.setAttribute("href", dataStr);
+  downloadAnchor.setAttribute("download", "mis_npcbots_registrados.json");
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+});
+
+// Importar la lista desde un archivo JSON previamente exportado
+document.getElementById('btnImportRoster').addEventListener('click', () => {
+  document.getElementById('fileImportRoster').click();
+});
+
+document.getElementById('fileImportRoster').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      const imported = JSON.parse(evt.target.result);
+      if (Array.isArray(imported)) {
+        if (confirm(`Se van a cargar ${imported.length} bots de la copia de seguridad. ¿Deseas continuar?`)) {
+          savedBots = imported;
+          saveToLocalStorage();
+          renderRoster();
+          alert('Lista importada y guardada correctamente.');
+        }
+      } else {
+        alert('Error: El formato del archivo JSON no es una lista válida.');
+      }
+    } catch(err) {
+      alert('Error crítico al procesar el archivo JSON.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // Resetear el control
+});
+
+/* =========================================================================
+   INICIALIZACIÓN
+   ========================================================================= */
+populateUnitClassSelect();
+renderClassGrids();
+renderAppearanceSection();
+renderAll();
+renderRoster(); // Carga inicial de bots salvados en el localStorage
+
+</script>
+</body>
+</html>
