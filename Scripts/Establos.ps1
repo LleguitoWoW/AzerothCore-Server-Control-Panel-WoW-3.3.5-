@@ -154,7 +154,7 @@ Function global:Establos-CargarColeccion {
         $nom = "#$entry"
         if ($p.Count -ge 2 -and $p[1]) { $nom = $p[1].Trim() }
         $qual = 0; if ($p.Count -ge 3) { try { $qual = [int]($p[2].Trim()) } catch {} }
-        $ilvl = 0; if ($p.Count -ge 4) { try { $ilvl = [int]($p[3].Trim()) } catch {} }
+        $ilvl = 0; if ($p.Count -ge 4) { try { $ilvl = [int]($p[2].Trim()) } catch {} }
         $sub  = 0; if ($p.Count -ge 5) { try { $sub  = [int]($p[4].Trim()) } catch {} }
 
         $obj = [PSCustomObject]@{
@@ -198,6 +198,85 @@ Function global:Establos-FiltrarItems {
         return $tmp
     }
     return $lista
+}
+
+Function global:Establos-ActualizarVistaPrevia {
+    param($entry, $nombreHint)
+
+    try {
+        $e = 0
+        try { $e = [int]$entry } catch { $e = 0 }
+        if ($e -le 0) { return }
+
+        $nombre = if ($nombreHint) { [string]$nombreHint } else { "#$e" }
+        $quality = 0
+        $ilvl = 0
+        try {
+            $sql = "SELECT IFNULL(name,''), IFNULL(Quality,0), IFNULL(ItemLevel,0) FROM item_template WHERE entry=$e LIMIT 1;"
+            $raw = @(Establos-Consulta $sql "acore_world")
+            if ($raw.Count -gt 0 -and $raw[0]) {
+                $p = ("$($raw[0])") -split "`t"
+                if ($p.Count -ge 1 -and $p[0]) { $nombre = $p[0].Trim() }
+                if ($p.Count -ge 2) { try { $quality = [int]($p[1].Trim()) } catch {} }
+                if ($p.Count -ge 3) { try { $ilvl = [int]($p[2].Trim()) } catch {} }
+            }
+        } catch {}
+
+        $color = Establos-ColorRareza $quality
+        if ($script:EstBordePreview) { $script:EstBordePreview.BackColor = $color }
+        if ($script:EstLblPrevNombre) {
+            $script:EstLblPrevNombre.Text = $nombre
+            $script:EstLblPrevNombre.ForeColor = $color
+        }
+        $meta = "Entry $e"
+        if ($ilvl -gt 0) { $meta += "  |  iLvl $ilvl" }
+        $meta += "  |  $(Establos-NombreRareza $quality)"
+        if ($script:EstLblPrevMeta) { $script:EstLblPrevMeta.Text = $meta }
+
+        $stats = ""
+        try {
+            if (Get-Command Obtener-TooltipItem -ErrorAction SilentlyContinue) {
+                $stats = [string](Obtener-TooltipItem $e $null $null)
+            }
+        } catch {}
+        if ($script:EstLblPrevStats) {
+            if ($stats -and $stats.Trim().Length -gt 0) {
+                $script:EstLblPrevStats.Text = $stats
+            } else {
+                $script:EstLblPrevStats.Text = (T-Est "TmPreviewHint" "Clic = captura Wowhead. Doble clic = ficha.")
+            }
+        }
+
+        $img = $null
+        # Preferir captura Wowhead (misma funcion que Transmog)
+        try {
+            if (Get-Command Transmog-ObtenerScreenshotWowhead -ErrorAction SilentlyContinue) {
+                $img = Transmog-ObtenerScreenshotWowhead $e
+            }
+        } catch { $img = $null }
+
+        if (-not $img) {
+            try {
+                if (Get-Command Descargar-IconoArmeria -ErrorAction SilentlyContinue) {
+                    $img = Descargar-IconoArmeria $e 128
+                }
+            } catch {}
+        }
+        if (-not $img -and $Global:RootDir) {
+            try {
+                $cf = Join-Path $Global:RootDir "Armeria\Imagenes\$e.jpg"
+                if (Test-Path -LiteralPath $cf) {
+                    $img0 = [System.Drawing.Image]::FromFile($cf)
+                    $img = New-Object System.Drawing.Bitmap $img0
+                    $img0.Dispose()
+                }
+            } catch {}
+        }
+        if ($script:EstPbPreview) {
+            $script:EstPbPreview.Image = $img
+            $script:EstPbPreview.SizeMode = "Zoom"
+        }
+    } catch {}
 }
 
 Function global:Establos-RellenarIconos {
@@ -249,11 +328,12 @@ Function global:Establos-RellenarIconos {
             }
             if ($img) { $pb.Image = $img }
 
-            $tip = "$($it.Nombre)`n$(Establos-NombreRareza $it.Quality)"
+            $nomItem = [string]$it.Nombre
+            $tip = "$nomItem`n$(Establos-NombreRareza $it.Quality)"
             if ($it.ItemLevel) { $tip += "  |  iLvl $($it.ItemLevel)" }
             $tip += "`nEntry: $entry"
             if ($it.SpellId) { $tip += "`nSpell: $($it.SpellId)" }
-            $tip += "`n" + (T-Est "TipDobleClicEstablos" "Doble clic = especificaciones")
+            $tip += "`n" + (T-Est "TipClicEstablos" "Clic = captura  |  Doble clic = ficha")
             try {
                 if ($tooltip) {
                     $tooltip.SetToolTip($borde, $tip)
@@ -263,7 +343,6 @@ Function global:Establos-RellenarIconos {
 
             $borde.Tag = $entry
             $pb.Tag = $entry
-            $nombreTag = [string]$it.Nombre
 
             $abrir = {
                 $fe = 0
@@ -281,12 +360,17 @@ Function global:Establos-RellenarIconos {
                 }
             }.GetNewClosure()
 
+            $preview = {
+                $fe = 0
+                try { $fe = [int]$this.Tag } catch {}
+                if ($fe -le 0) { return }
+                try { Establos-ActualizarVistaPrevia $fe $null } catch {}
+            }.GetNewClosure()
+
+            $pb.Add_Click($preview)
+            $borde.Add_Click($preview)
             $pb.Add_DoubleClick($abrir)
             $borde.Add_DoubleClick($abrir)
-            # Un clic tambien puede abrir (mas comodo en iconos pequenos)
-            $pb.Add_Click({
-                # solo doble clic para no abrir al seleccionar; se deja solo DoubleClick
-            }.GetNewClosure())
 
             [void]$borde.Controls.Add($pb)
             [void]$panel.Controls.Add($borde)
@@ -313,7 +397,7 @@ Function global:Mostrar-VentanaEstablos {
 
         $estForm = New-Object System.Windows.Forms.Form
         $estForm.Text = ((T-Est "TituloEstablos" "Establos - {0}") -f $nombreChar)
-        $estForm.Size = New-Object System.Drawing.Size(920, 640)
+        $estForm.Size = New-Object System.Drawing.Size(980, 680)
         $estForm.StartPosition = "CenterParent"
         $estForm.BackColor = [System.Drawing.Color]::FromArgb(15, 12, 10)
         $estForm.ForeColor = [System.Drawing.Color]::White
@@ -332,9 +416,9 @@ Function global:Mostrar-VentanaEstablos {
         [void]$estForm.Controls.Add($lblTit)
 
         $lblAviso = New-Object System.Windows.Forms.Label
-        $lblAviso.Text = (T-Est "AvisoEstablos" "Monturas y mascotas de compania aprendidas. Doble clic en un icono = especificaciones.")
+        $lblAviso.Text = (T-Est "AvisoEstablos" "Clic = captura del objeto (Wowhead). Doble clic = especificaciones.")
         $lblAviso.Location = New-Object System.Drawing.Point(12, 32)
-        $lblAviso.Size = New-Object System.Drawing.Size(880, 20)
+        $lblAviso.Size = New-Object System.Drawing.Size(940, 20)
         $lblAviso.Font = $fPeq
         $lblAviso.ForeColor = [System.Drawing.Color]::FromArgb(255, 180, 80)
         [void]$estForm.Controls.Add($lblAviso)
@@ -348,15 +432,15 @@ Function global:Mostrar-VentanaEstablos {
         [void]$estForm.Controls.Add($lblInfo)
 
         $txtFiltro = New-Object System.Windows.Forms.TextBox
-        $txtFiltro.Location = New-Object System.Drawing.Point(540, 54)
-        $txtFiltro.Size = New-Object System.Drawing.Size(180, 22)
+        $txtFiltro.Location = New-Object System.Drawing.Point(560, 54)
+        $txtFiltro.Size = New-Object System.Drawing.Size(200, 22)
         $txtFiltro.BackColor = [System.Drawing.Color]::FromArgb(30, 28, 24)
         $txtFiltro.ForeColor = [System.Drawing.Color]::White
         [void]$estForm.Controls.Add($txtFiltro)
 
         $btnFiltrar = New-Object System.Windows.Forms.Button
         $btnFiltrar.Text = (T-Est "LblFiltrar" "Filtrar")
-        $btnFiltrar.Location = New-Object System.Drawing.Point(730, 52)
+        $btnFiltrar.Location = New-Object System.Drawing.Point(770, 52)
         $btnFiltrar.Size = New-Object System.Drawing.Size(80, 24)
         $btnFiltrar.FlatStyle = "Flat"
         $btnFiltrar.BackColor = [System.Drawing.Color]::FromArgb(50, 40, 20)
@@ -369,43 +453,104 @@ Function global:Mostrar-VentanaEstablos {
         $tooltip.ReshowDelay = 100
         $tooltip.ShowAlways = $true
 
-        # --- Monturas (rejilla de iconos) ---
+        # Monturas (izquierda)
         $lblMont = New-Object System.Windows.Forms.Label
         $lblMont.Text = (T-Est "LblMonturas" "Monturas")
         $lblMont.Location = New-Object System.Drawing.Point(12, 82)
-        $lblMont.Size = New-Object System.Drawing.Size(440, 18)
+        $lblMont.Size = New-Object System.Drawing.Size(280, 18)
         $lblMont.Font = $fBold
         $lblMont.ForeColor = [System.Drawing.Color]::FromArgb(100, 200, 255)
         [void]$estForm.Controls.Add($lblMont)
 
         $panelMont = New-Object System.Windows.Forms.FlowLayoutPanel
         $panelMont.Location = New-Object System.Drawing.Point(12, 104)
-        $panelMont.Size = New-Object System.Drawing.Size(440, 460)
+        $panelMont.Size = New-Object System.Drawing.Size(280, 520)
         $panelMont.BackColor = [System.Drawing.Color]::FromArgb(22, 20, 18)
         $panelMont.AutoScroll = $true
         $panelMont.WrapContents = $true
         $panelMont.FlowDirection = "LeftToRight"
-        $panelMont.Padding = New-Object System.Windows.Forms.Padding(6)
+        $panelMont.Padding = New-Object System.Windows.Forms.Padding(4)
         [void]$estForm.Controls.Add($panelMont)
 
-        # --- Mascotas ---
+        # Mascotas (centro)
         $lblPet = New-Object System.Windows.Forms.Label
         $lblPet.Text = (T-Est "LblMascotasCompania" "Mascotas de compania")
-        $lblPet.Location = New-Object System.Drawing.Point(468, 82)
-        $lblPet.Size = New-Object System.Drawing.Size(420, 18)
+        $lblPet.Location = New-Object System.Drawing.Point(300, 82)
+        $lblPet.Size = New-Object System.Drawing.Size(280, 18)
         $lblPet.Font = $fBold
         $lblPet.ForeColor = [System.Drawing.Color]::FromArgb(160, 220, 120)
         [void]$estForm.Controls.Add($lblPet)
 
         $panelPet = New-Object System.Windows.Forms.FlowLayoutPanel
-        $panelPet.Location = New-Object System.Drawing.Point(468, 104)
-        $panelPet.Size = New-Object System.Drawing.Size(420, 460)
+        $panelPet.Location = New-Object System.Drawing.Point(300, 104)
+        $panelPet.Size = New-Object System.Drawing.Size(280, 520)
         $panelPet.BackColor = [System.Drawing.Color]::FromArgb(22, 20, 18)
         $panelPet.AutoScroll = $true
         $panelPet.WrapContents = $true
         $panelPet.FlowDirection = "LeftToRight"
-        $panelPet.Padding = New-Object System.Windows.Forms.Padding(6)
+        $panelPet.Padding = New-Object System.Windows.Forms.Padding(4)
         [void]$estForm.Controls.Add($panelPet)
+
+        # Vista previa derecha (captura Wowhead)
+        $lblPrevTit = New-Object System.Windows.Forms.Label
+        $lblPrevTit.Text = (T-Est "TmPreviewTitulo" "Vista previa del objeto")
+        $lblPrevTit.Location = New-Object System.Drawing.Point(592, 82)
+        $lblPrevTit.Size = New-Object System.Drawing.Size(360, 18)
+        $lblPrevTit.Font = $fBold
+        $lblPrevTit.ForeColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
+        [void]$estForm.Controls.Add($lblPrevTit)
+
+        $panelPreview = New-Object System.Windows.Forms.Panel
+        $panelPreview.Location = New-Object System.Drawing.Point(592, 104)
+        $panelPreview.Size = New-Object System.Drawing.Size(360, 520)
+        $panelPreview.BackColor = [System.Drawing.Color]::FromArgb(18, 16, 14)
+        $panelPreview.BorderStyle = "FixedSingle"
+        [void]$estForm.Controls.Add($panelPreview)
+
+        $bordeIcono = New-Object System.Windows.Forms.Panel
+        $bordeIcono.Location = New-Object System.Drawing.Point(20, 16)
+        $bordeIcono.Size = New-Object System.Drawing.Size(318, 240)
+        $bordeIcono.BackColor = [System.Drawing.Color]::FromArgb(60, 50, 40)
+        $bordeIcono.Padding = New-Object System.Windows.Forms.Padding(4)
+        [void]$panelPreview.Controls.Add($bordeIcono)
+
+        $pbPreview = New-Object System.Windows.Forms.PictureBox
+        $pbPreview.Dock = "Fill"
+        $pbPreview.SizeMode = "Zoom"
+        $pbPreview.BackColor = [System.Drawing.Color]::FromArgb(12, 10, 8)
+        [void]$bordeIcono.Controls.Add($pbPreview)
+
+        $lblPrevNombre = New-Object System.Windows.Forms.Label
+        $lblPrevNombre.Location = New-Object System.Drawing.Point(10, 268)
+        $lblPrevNombre.Size = New-Object System.Drawing.Size(338, 28)
+        $lblPrevNombre.Font = New-Object System.Drawing.Font("Georgia", 11, [System.Drawing.FontStyle]::Bold)
+        $lblPrevNombre.ForeColor = [System.Drawing.Color]::White
+        $lblPrevNombre.TextAlign = "MiddleCenter"
+        $lblPrevNombre.Text = (T-Est "TmPreviewVacio" "Selecciona un item de la lista")
+        [void]$panelPreview.Controls.Add($lblPrevNombre)
+
+        $lblPrevMeta = New-Object System.Windows.Forms.Label
+        $lblPrevMeta.Location = New-Object System.Drawing.Point(10, 300)
+        $lblPrevMeta.Size = New-Object System.Drawing.Size(338, 36)
+        $lblPrevMeta.Font = $fPeq
+        $lblPrevMeta.ForeColor = [System.Drawing.Color]::FromArgb(180, 170, 150)
+        $lblPrevMeta.TextAlign = "MiddleCenter"
+        $lblPrevMeta.Text = ""
+        [void]$panelPreview.Controls.Add($lblPrevMeta)
+
+        $lblPrevStats = New-Object System.Windows.Forms.Label
+        $lblPrevStats.Location = New-Object System.Drawing.Point(10, 340)
+        $lblPrevStats.Size = New-Object System.Drawing.Size(338, 165)
+        $lblPrevStats.Font = New-Object System.Drawing.Font("Consolas", 8)
+        $lblPrevStats.ForeColor = [System.Drawing.Color]::FromArgb(100, 220, 100)
+        $lblPrevStats.Text = (T-Est "TipClicEstablos" "Clic en un icono = captura Wowhead.`nDoble clic = ficha completa.")
+        [void]$panelPreview.Controls.Add($lblPrevStats)
+
+        $script:EstPbPreview = $pbPreview
+        $script:EstLblPrevNombre = $lblPrevNombre
+        $script:EstLblPrevMeta = $lblPrevMeta
+        $script:EstLblPrevStats = $lblPrevStats
+        $script:EstBordePreview = $bordeIcono
 
         $datos = Establos-CargarColeccion $guidNum
         if ($datos.Error) {
@@ -413,7 +558,7 @@ Function global:Mostrar-VentanaEstablos {
         } else {
             $nM = @($datos.Monturas).Count
             $nP = @($datos.Mascotas).Count
-            $lblInfo.Text = ((T-Est "LblResumenEstablos" "Monturas: {0}  |  Mascotas: {1}  |  Doble clic = ficha") -f $nM, $nP)
+            $lblInfo.Text = ((T-Est "LblResumenEstablos" "Monturas: {0}  |  Mascotas: {1}  |  Clic = captura  |  Doble clic = ficha") -f $nM, $nP)
             if ($nM -eq 0 -and $nP -eq 0 -and $datos.Debug) {
                 $lblInfo.Text += "  [" + $datos.Debug + "]"
             }

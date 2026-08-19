@@ -419,6 +419,13 @@ NOTAS:
         "LblResumenEstablos"         = "Monturas: {0}  |  Mascotas: {1}  |  Doble clic = ficha"
         "TipEstablos"                = "Monturas y mascotas de compania aprendidas"
         "TipDobleClicEstablos"       = "Doble clic = especificaciones"
+        "TipClicEstablos"            = "Clic = captura Wowhead  |  Doble clic = ficha"
+        "TmPreviewTitulo"            = "Vista previa del objeto"
+        "TmPreviewVacio"             = "Selecciona un item de la lista"
+        "TmPreviewHint"              = "Clic = captura del objeto equipado (Wowhead) + datos.`nDoble clic = ficha completa."
+        "TmPreviewSinStats"          = "Sin estadisticas adicionales."
+        "TmPreviewSinCaptura"        = "Sin captura de Wowhead. Se usa el icono si hay cache."
+
         "MsgModuloEstablosNoCargado" = "No se cargo Establos.ps1.`nColocalo en Scripts y reinicia el panel.`n`nRuta:`n{0}"
 
         "MsgArmeriaNoModulo"         = "No se cargo armeria.ps1"
@@ -842,6 +849,13 @@ NOTES:
         "LblResumenEstablos"         = "Mounts: {0}  |  Pets: {1}  |  Double-click = details"
         "TipEstablos"                = "Learned mounts and companion pets"
         "TipDobleClicEstablos"       = "Double-click = details"
+        "TipClicEstablos"            = "Click = Wowhead screenshot  |  Double-click = details"
+        "TmPreviewTitulo"            = "Item preview"
+        "TmPreviewVacio"             = "Select an item from the list"
+        "TmPreviewHint"              = "Click = equipped item screenshot (Wowhead) + data.`nDouble-click = full details."
+        "TmPreviewSinStats"          = "No additional stats."
+        "TmPreviewSinCaptura"        = "No Wowhead screenshot. Icon used if cached."
+
         "MsgModuloEstablosNoCargado" = "Establos.ps1 was not loaded.`nPlace it in Scripts and restart the panel.`n`nPath:`n{0}"
 
         "MsgArmeriaNoModulo"         = "armeria.ps1 was not loaded"

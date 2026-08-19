@@ -366,6 +366,233 @@ Function global:Transmog-RellenarLista {
     }
 }
 
+
+Function global:Transmog-CargarIconoLocal($entry, $tamanio) {
+    $e = 0
+    try { $e = [int]$entry } catch { return $null }
+    if ($e -le 0) { return $null }
+    $sz = 64
+    try { if ($tamanio -gt 0) { $sz = [int]$tamanio } } catch {}
+    try {
+        if (Get-Command Descargar-IconoArmeria -ErrorAction SilentlyContinue) {
+            $img = Descargar-IconoArmeria $e $sz
+            if ($img) { return $img }
+        }
+    } catch {}
+    $dirs = @()
+    if ($Global:RootDir) {
+        $dirs += (Join-Path $Global:RootDir "Armeria\Imagenes")
+        $dirs += (Join-Path $Global:RootDir "Imagenes")
+    }
+    if ($Global:AppRoot) { $dirs += (Join-Path $Global:AppRoot "Imagenes") }
+    foreach ($dir in $dirs) {
+        if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { continue }
+        foreach ($ext in @(".jpg", ".png", ".jpeg", ".bmp")) {
+            $fp = Join-Path $dir ("$e$ext")
+            if (Test-Path -LiteralPath $fp) {
+                try {
+                    $img0 = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $fp).Path)
+                    $bmp = New-Object System.Drawing.Bitmap $sz, $sz
+                    $g = [System.Drawing.Graphics]::FromImage($bmp)
+                    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                    $g.DrawImage($img0, 0, 0, $sz, $sz)
+                    $g.Dispose(); $img0.Dispose()
+                    return $bmp
+                } catch {}
+            }
+        }
+    }
+    return $null
+}
+
+
+Function global:Transmog-RutaCacheScreenshot($entry) {
+    $e = 0
+    try { $e = [int]$entry } catch { return $null }
+    $dirs = @()
+    if ($Global:RootDir) {
+        $dirs += (Join-Path $Global:RootDir "Armeria\Imagenes\screenshots")
+        $dirs += (Join-Path $Global:RootDir "Imagenes\screenshots")
+    }
+    if ($Global:AppRoot) { $dirs += (Join-Path $Global:AppRoot "Imagenes\screenshots") }
+    foreach ($d in $dirs) {
+        if ($d) { return (Join-Path $d "$e.jpg") }
+    }
+    return $null
+}
+
+# Descarga captura de Wowhead (item equipado en personaje). Cache local.
+# Solo se llama al hacer clic (no en masa) para no congelar el panel.
+Function global:Transmog-ObtenerScreenshotWowhead($entry) {
+    $e = 0
+    try { $e = [int]$entry } catch { return $null }
+    if ($e -le 0) { return $null }
+
+    $cacheFile = Transmog-RutaCacheScreenshot $e
+    if ($cacheFile -and (Test-Path -LiteralPath $cacheFile)) {
+        try {
+            $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $cacheFile).Path)
+            $clone = New-Object System.Drawing.Bitmap $img
+            $img.Dispose()
+            return $clone
+        } catch {}
+    }
+
+    # Directorio cache
+    if ($cacheFile) {
+        $dir = Split-Path -Parent $cacheFile
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+            try { New-Item -ItemType Directory -Path $dir -Force | Out-Null } catch {}
+        }
+    }
+
+    try {
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        $wc.Headers.Add("Accept", "text/html")
+        # Timeout aproximado via ServicePoint
+        try { [System.Net.ServicePointManager]::Expect100Continue = $false } catch {}
+        $html = $null
+        foreach ($urlPage in @(
+            "https://www.wowhead.com/wotlk/item=$e",
+            "https://www.wowhead.com/wotlk/es/item=$e",
+            "https://www.wowhead.com/item=$e"
+        )) {
+            try {
+                $html = $wc.DownloadString($urlPage)
+                if ($html -and $html.Length -gt 1000) { break }
+            } catch { $html = $null }
+        }
+        if (-not $html) { return $null }
+
+        $shotId = $null
+        # Preferir bloque screenshots = [{...id...typeId...}]
+        if ($html -match 'screenshots\s*=\s*(\[[\s\S]*?\]);') {
+            $json = $Matches[1]
+            $ids = [regex]::Matches($json, '"id"\s*:\s*(\d+)')
+            if ($ids.Count -gt 0) {
+                # Ultimo suele ser el mas visible / reciente; primero tambien vale
+                $shotId = $ids[$ids.Count - 1].Groups[1].Value
+                # Si hay varios, preferir el primero de la lista (orden wowhead)
+                $shotId = $ids[0].Groups[1].Value
+            }
+        }
+        if (-not $shotId) {
+            $m2 = [regex]::Match($html, 'uploads/screenshots/(?:normal|thumb|resized)/(\d+)')
+            if ($m2.Success) { $shotId = $m2.Groups[1].Value }
+        }
+        if (-not $shotId) { return $null }
+
+        $bytes = $null
+        foreach ($imgUrl in @(
+            "https://wow.zamimg.com/uploads/screenshots/normal/$shotId.jpg",
+            "https://wow.zamimg.com/uploads/screenshots/resized/$shotId.jpg",
+            "https://wow.zamimg.com/uploads/screenshots/thumb/$shotId.jpg"
+        )) {
+            try {
+                $bytes = $wc.DownloadData($imgUrl)
+                if ($bytes -and $bytes.Length -gt 500) { break }
+                $bytes = $null
+            } catch { $bytes = $null }
+        }
+        if (-not $bytes) { return $null }
+
+        if ($cacheFile) {
+            try { [System.IO.File]::WriteAllBytes($cacheFile, $bytes) } catch {}
+        }
+        $ms = New-Object System.IO.MemoryStream(,$bytes)
+        $img2 = [System.Drawing.Image]::FromStream($ms)
+        $clone2 = New-Object System.Drawing.Bitmap $img2
+        $img2.Dispose(); $ms.Dispose()
+        return $clone2
+    } catch {
+        return $null
+    }
+}
+
+Function global:Transmog-ActualizarVistaPrevia {
+    param($entry, $nombreHint, $pbPreview, $lblNombre, $lblMeta, $lblStats, $panelBorde)
+
+    try {
+        $e = 0
+        try { $e = [int]$entry } catch { $e = 0 }
+        if ($e -le 0) {
+            if ($pbPreview) { $pbPreview.Image = $null }
+            if ($lblNombre) { $lblNombre.Text = (T-Tm "TmPreviewVacio" "Selecciona un item de la lista") }
+            if ($lblMeta) { $lblMeta.Text = "" }
+            if ($lblStats) { $lblStats.Text = "" }
+            if ($panelBorde) { $panelBorde.BackColor = [System.Drawing.Color]::FromArgb(60, 50, 40) }
+            return
+        }
+
+        $bdWorld = "acore_world"
+        $nombre = if ($nombreHint) { [string]$nombreHint } else { "#$e" }
+        $quality = 0
+        $ilvl = 0
+        $classId = -1
+        $displayId = 0
+        try {
+            $sql = "SELECT IFNULL(name,''), IFNULL(Quality,0), IFNULL(ItemLevel,0), IFNULL(class,0), IFNULL(displayid,0) FROM item_template WHERE entry=$e LIMIT 1;"
+            $raw = @(Transmog-Consulta $sql $bdWorld)
+            if ($raw.Count -gt 0 -and $raw[0]) {
+                $p = ("$($raw[0])") -split "`t"
+                if ($p.Count -ge 1 -and $p[0]) { $nombre = $p[0].Trim() }
+                if ($p.Count -ge 2) { try { $quality = [int]($p[1].Trim()) } catch {} }
+                if ($p.Count -ge 3) { try { $ilvl = [int]($p[2].Trim()) } catch {} }
+                if ($p.Count -ge 4) { try { $classId = [int]($p[3].Trim()) } catch {} }
+                if ($p.Count -ge 5) { try { $displayId = [int]($p[4].Trim()) } catch {} }
+            }
+        } catch {}
+
+        $rareza = Transmog-NombreRareza $quality
+        $colorCal = Transmog-ColorRareza $quality
+        if ($panelBorde) { $panelBorde.BackColor = $colorCal }
+        if ($lblNombre) {
+            $lblNombre.Text = $nombre
+            $lblNombre.ForeColor = $colorCal
+        }
+        $meta = "Entry $e"
+        if ($ilvl -gt 0) { $meta += "  |  iLvl $ilvl" }
+        $meta += "  |  $rareza"
+        if ($classId -ge 0) { $meta += "  |  $(Transmog-NombreClase $classId)" }
+        if ($displayId -gt 0) { $meta += "`nDisplayID: $displayId" }
+        if ($lblMeta) { $lblMeta.Text = $meta }
+
+        $stats = ""
+        try {
+            if (Get-Command Obtener-TooltipItem -ErrorAction SilentlyContinue) {
+                $stats = [string](Obtener-TooltipItem $e $null $null)
+            }
+        } catch {}
+        if ($lblStats) {
+            if ($stats -and $stats.Trim().Length -gt 0) {
+                $lblStats.Text = $stats
+            } else {
+                $lblStats.Text = (T-Tm "TmPreviewSinStats" "Sin estadisticas adicionales.")
+            }
+        }
+
+        if ($pbPreview) {
+            # 1) Captura Wowhead (objeto equipado)  2) fallback icono
+            $img = $null
+            try { $img = Transmog-ObtenerScreenshotWowhead $e } catch { $img = $null }
+            if (-not $img) {
+                try { $img = Transmog-CargarIconoLocal $e 128 } catch { $img = $null }
+            }
+            if ($img) {
+                $pbPreview.Image = $img
+                $pbPreview.SizeMode = "Zoom"
+            } else {
+                $pbPreview.Image = $null
+            }
+        }
+    } catch {
+        try {
+            if ($lblNombre) { $lblNombre.Text = "Error: $($_.Exception.Message)" }
+        } catch {}
+    }
+}
+
 Function global:Mostrar-VentanaTransmog {
     param($guidChar, $nombreChar, $formPadre)
 
@@ -384,7 +611,7 @@ Function global:Mostrar-VentanaTransmog {
 
         $tmForm = New-Object System.Windows.Forms.Form
         $tmForm.Text = ((T-Tm "TituloTransmog" "Transmog - {0}") -f $nombreChar)
-        $tmForm.Size = New-Object System.Drawing.Size(960, 780)
+        $tmForm.Size = New-Object System.Drawing.Size(960, 800)
         $tmForm.StartPosition = "CenterParent"
         $tmForm.BackColor = [System.Drawing.Color]::FromArgb(15, 12, 10)
         $tmForm.ForeColor = [System.Drawing.Color]::White
@@ -455,7 +682,7 @@ Function global:Mostrar-VentanaTransmog {
         $lblActivosTit = New-Object System.Windows.Forms.Label
         $lblActivosTit.Text = (T-Tm "LblActivosTitulo" "Transmogs activos de este personaje (paperdoll)")
         $lblActivosTit.Location = New-Object System.Drawing.Point(12, 316)
-        $lblActivosTit.Size = New-Object System.Drawing.Size(920, 18)
+        $lblActivosTit.Size = New-Object System.Drawing.Size(470, 18)
         $lblActivosTit.Font = $fBold
         $lblActivosTit.ForeColor = [System.Drawing.Color]::FromArgb(160, 200, 255)
         [void]$tmForm.Controls.Add($lblActivosTit)
@@ -469,20 +696,74 @@ Function global:Mostrar-VentanaTransmog {
         [void]$tmForm.Controls.Add($panelDoll)
 
         $lblActivos = New-Object System.Windows.Forms.Label
-        $lblActivos.Location = New-Object System.Drawing.Point(500, 338)
-        $lblActivos.Size = New-Object System.Drawing.Size(430, 60)
+        $lblActivos.Location = New-Object System.Drawing.Point(12, 732)
+        $lblActivos.Size = New-Object System.Drawing.Size(470, 24)
         $lblActivos.Font = $fPeq
         $lblActivos.ForeColor = [System.Drawing.Color]::FromArgb(180, 170, 150)
         $lblActivos.Text = "Cargando paperdoll..."
         [void]$tmForm.Controls.Add($lblActivos)
 
-        $lblLeyenda = New-Object System.Windows.Forms.Label
-        $lblLeyenda.Location = New-Object System.Drawing.Point(500, 410)
-        $lblLeyenda.Size = New-Object System.Drawing.Size(430, 80)
-        $lblLeyenda.Font = $fPeq
-        $lblLeyenda.ForeColor = [System.Drawing.Color]::FromArgb(160, 200, 255)
-        $lblLeyenda.Text = "Solo se muestran slots con transmog activo (equipados).`nClic en un slot = ficha estilo Armeria.`nBorde = rareza de la apariencia."
-        [void]$tmForm.Controls.Add($lblLeyenda)
+        # Panel derecho: vista previa del item (clic en lista)
+        $lblPreviewTit = New-Object System.Windows.Forms.Label
+        $lblPreviewTit.Text = (T-Tm "TmPreviewTitulo" "Vista previa del objeto")
+        $lblPreviewTit.Location = New-Object System.Drawing.Point(500, 316)
+        $lblPreviewTit.Size = New-Object System.Drawing.Size(430, 18)
+        $lblPreviewTit.Font = $fBold
+        $lblPreviewTit.ForeColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
+        [void]$tmForm.Controls.Add($lblPreviewTit)
+
+        $panelPreview = New-Object System.Windows.Forms.Panel
+        $panelPreview.Location = New-Object System.Drawing.Point(500, 338)
+        $panelPreview.Size = New-Object System.Drawing.Size(430, 390)
+        $panelPreview.BackColor = [System.Drawing.Color]::FromArgb(18, 16, 14)
+        $panelPreview.BorderStyle = "FixedSingle"
+        [void]$tmForm.Controls.Add($panelPreview)
+
+        $bordeIcono = New-Object System.Windows.Forms.Panel
+        $bordeIcono.Location = New-Object System.Drawing.Point(55, 12)
+        $bordeIcono.Size = New-Object System.Drawing.Size(320, 200)
+        $bordeIcono.BackColor = [System.Drawing.Color]::FromArgb(60, 50, 40)
+        $bordeIcono.Padding = New-Object System.Windows.Forms.Padding(4)
+        [void]$panelPreview.Controls.Add($bordeIcono)
+
+        $pbPreview = New-Object System.Windows.Forms.PictureBox
+        $pbPreview.Dock = "Fill"
+        $pbPreview.SizeMode = "StretchImage"
+        $pbPreview.BackColor = [System.Drawing.Color]::FromArgb(12, 10, 8)
+        $pbPreview.BorderStyle = "None"
+        [void]$bordeIcono.Controls.Add($pbPreview)
+
+        $lblPrevNombre = New-Object System.Windows.Forms.Label
+        $lblPrevNombre.Location = New-Object System.Drawing.Point(12, 220)
+        $lblPrevNombre.Size = New-Object System.Drawing.Size(406, 28)
+        $lblPrevNombre.Font = New-Object System.Drawing.Font("Georgia", 11, [System.Drawing.FontStyle]::Bold)
+        $lblPrevNombre.ForeColor = [System.Drawing.Color]::White
+        $lblPrevNombre.TextAlign = "MiddleCenter"
+        $lblPrevNombre.Text = (T-Tm "TmPreviewVacio" "Selecciona un item de la lista")
+        [void]$panelPreview.Controls.Add($lblPrevNombre)
+
+        $lblPrevMeta = New-Object System.Windows.Forms.Label
+        $lblPrevMeta.Location = New-Object System.Drawing.Point(12, 250)
+        $lblPrevMeta.Size = New-Object System.Drawing.Size(406, 36)
+        $lblPrevMeta.Font = $fPeq
+        $lblPrevMeta.ForeColor = [System.Drawing.Color]::FromArgb(180, 170, 150)
+        $lblPrevMeta.TextAlign = "MiddleCenter"
+        $lblPrevMeta.Text = ""
+        [void]$panelPreview.Controls.Add($lblPrevMeta)
+
+        $lblPrevStats = New-Object System.Windows.Forms.Label
+        $lblPrevStats.Location = New-Object System.Drawing.Point(12, 288)
+        $lblPrevStats.Size = New-Object System.Drawing.Size(406, 90)
+        $lblPrevStats.Font = New-Object System.Drawing.Font("Consolas", 8)
+        $lblPrevStats.ForeColor = [System.Drawing.Color]::FromArgb(100, 220, 100)
+        $lblPrevStats.Text = (T-Tm "TmPreviewHint" "Clic = captura del objeto equipado (Wowhead) + datos.`nDoble clic = ficha completa.")
+        [void]$panelPreview.Controls.Add($lblPrevStats)
+
+        $script:TmPbPreview = $pbPreview
+        $script:TmLblPrevNombre = $lblPrevNombre
+        $script:TmLblPrevMeta = $lblPrevMeta
+        $script:TmLblPrevStats = $lblPrevStats
+        $script:TmBordePreview = $bordeIcono
 
         # Posiciones tipo Armeria (escala ~0.9)
         $tmPosSlot = @(
@@ -699,8 +980,24 @@ Function global:Mostrar-VentanaTransmog {
             if ($_.KeyCode -eq "Enter") { & $abrirDetalle $script:TmLv; $_.SuppressKeyPress = $true }
         })
 
-        if ($lblInfo.Text -notmatch "Doble clic") {
-            $lblInfo.Text = ($lblInfo.Text + "  |  Doble clic = ficha estilo Armeria")
+        # Un clic: vista previa a la derecha (icono grande + datos)
+        $lv.Add_SelectedIndexChanged({
+            try {
+                if (-not $script:TmLv -or $script:TmLv.SelectedItems.Count -lt 1) { return }
+                $sel = $script:TmLv.SelectedItems[0]
+                $ent = 0
+                if ($sel.Tag) { try { $ent = [int]$sel.Tag } catch {} }
+                if ($ent -le 0 -and $sel.SubItems.Count -gt 1) {
+                    try { $ent = [int]$sel.SubItems[1].Text } catch {}
+                }
+                if ($ent -gt 0) {
+                    Transmog-ActualizarVistaPrevia $ent $sel.Text $script:TmPbPreview $script:TmLblPrevNombre $script:TmLblPrevMeta $script:TmLblPrevStats $script:TmBordePreview
+                }
+            } catch {}
+        })
+
+        if ($lblInfo.Text -notmatch "Clic") {
+            $lblInfo.Text = ($lblInfo.Text + "  |  Clic = vista previa  |  Doble clic = ficha")
         }
 
         [void]$tmForm.ShowDialog()
