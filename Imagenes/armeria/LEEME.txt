@@ -1,0 +1,12 @@
+Iconos de la Armeria (botones de acceso rapido)
+===============================================
+Coloca aqui tus PNG/JPG (32x32 o 64x64 recomendado):
+
+  pvp.png
+  talentos.png
+  reputaciones.png
+  logros.png
+  transmog.png
+  establos.png
+
+Si no hay archivo propio, se usa el icono Wowhead por defecto.
