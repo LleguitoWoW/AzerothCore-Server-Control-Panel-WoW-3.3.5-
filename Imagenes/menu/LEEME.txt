@@ -1,0 +1,19 @@
+Iconos personalizados del menu lateral
+======================================
+
+Coloca aqui imagenes PNG/JPG de 32x32 o 64x64 (se redimensionan solas).
+
+Nombres reconocidos (cualquiera de estas formas):
+
+  menu_config.png     o  config.png
+  menu_cuentas.png    o  cuentas.png
+  menu_armeria.png    o  armeria.png
+  menu_personajes.png o  personajes.png
+  menu_descargas.png  o  descargas.png
+  menu_npcbots.png    o  npcbots.png
+  menu_mods.png       o  mods.png
+  menu_reino.png      o  reino.png
+
+Si no hay archivo personalizado, se usa el icono de Wowhead por defecto.
+
+Carpeta:  <Panel>\Imagenes\menu\
