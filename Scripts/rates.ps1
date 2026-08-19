@@ -6,35 +6,63 @@
 # guardada en config_server.txt. Si no, intenta autodetectarlo dentro de la carpeta
 # del WorldServer, y como último recurso pide al usuario que lo seleccione a mano.
 Function Obtener-RutaWorldConf {
-    if ($Global:WorldConfPath -and (Test-Path $Global:WorldConfPath)) { return $Global:WorldConfPath }
+    # Solo aceptamos ARCHIVOS (no carpetas). Si en config_server.txt quedo una
+    # carpeta (ej. ...\configs), Test-Path sin -PathType Leaf la daba por valida
+    # y luego Set-Content fallaba con "Acceso denegado".
+    if ($Global:WorldConfPath -and (Test-Path -LiteralPath $Global:WorldConfPath -PathType Leaf)) {
+        return $Global:WorldConfPath
+    }
+    if ($Global:WorldConfPath -and (Test-Path -LiteralPath $Global:WorldConfPath -PathType Container)) {
+        $Global:WorldConfPath = ""
+    }
+
+    if (-not $Global:WorldDir) { return $null }
 
     $candidatos = @(
-        (Join-Path $Global:WorldDir "worldserver.conf"),
+        (Join-Path $Global:WorldDir "configs\worldserver.conf"),
         (Join-Path $Global:WorldDir "etc\worldserver.conf"),
-        (Join-Path $Global:WorldDir "configs\worldserver.conf")
+        (Join-Path $Global:WorldDir "worldserver.conf"),
+        (Join-Path $Global:WorldDir "configs\worldserver.conf.dist")
     )
     foreach ($candidato in $candidatos) {
-        if (Test-Path $candidato) {
+        if (Test-Path -LiteralPath $candidato -PathType Leaf) {
+            # Preferir .conf real sobre .dist
+            if ($candidato -like "*.dist") { continue }
             $Global:WorldConfPath = $candidato
-            Guardar-Configuracion
+            try { Guardar-Configuracion } catch {}
             return $candidato
         }
     }
-
-    $encontrado = Get-ChildItem -Path $Global:WorldDir -Filter "worldserver.conf" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($encontrado) {
-        $Global:WorldConfPath = $encontrado.FullName
-        Guardar-Configuracion
-        return $encontrado.FullName
+    # Si solo existe .dist, avisar pero no usarlo como destino de escritura
+    foreach ($candidato in $candidatos) {
+        if ($candidato -like "*.dist" -and (Test-Path -LiteralPath $candidato -PathType Leaf)) {
+            break
+        }
     }
+
+    try {
+        $encontrado = Get-ChildItem -LiteralPath $Global:WorldDir -Filter "worldserver.conf" -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { -not $_.PSIsContainer -and $_.Name -eq "worldserver.conf" } |
+            Select-Object -First 1
+        if ($encontrado) {
+            $Global:WorldConfPath = $encontrado.FullName
+            try { Guardar-Configuracion } catch {}
+            return $encontrado.FullName
+        }
+    } catch {}
 
     $fileBrowser = New-Object System.Windows.Forms.OpenFileDialog
     $fileBrowser.Title = Obtener-Texto "TituloBuscarConf" "Selecciona el archivo worldserver.conf"
     $fileBrowser.Filter = "worldserver.conf|worldserver.conf|Todos los archivos (*.*)|*.*"
+    if ($Global:WorldDir -and (Test-Path -LiteralPath $Global:WorldDir)) {
+        $fileBrowser.InitialDirectory = $Global:WorldDir
+    }
     if ($fileBrowser.ShowDialog() -eq 'OK') {
-        $Global:WorldConfPath = $fileBrowser.FileName
-        Guardar-Configuracion
-        return $fileBrowser.FileName
+        if (Test-Path -LiteralPath $fileBrowser.FileName -PathType Leaf) {
+            $Global:WorldConfPath = $fileBrowser.FileName
+            try { Guardar-Configuracion } catch {}
+            return $fileBrowser.FileName
+        }
     }
     return $null
 }
@@ -49,14 +77,14 @@ Function Obtener-RutaPlayerbotsConf {
         (Join-Path $Global:WorldDir "modules\Playerbots.conf")
     )
     foreach ($candidato in $candidatos) {
-        if (Test-Path $candidato) { return $candidato }
+        if (Test-Path -LiteralPath $candidato -PathType Leaf) { return $candidato }
     }
-    # Busqueda recursiva por si la carpeta tiene otro nombre
     try {
-        $encontrado = Get-ChildItem -Path $Global:WorldDir -Filter "Playerbots.conf" -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match 'modules' } | Select-Object -First 1
+        $encontrado = Get-ChildItem -LiteralPath $Global:WorldDir -Filter "Playerbots.conf" -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
         if ($encontrado) { return $encontrado.FullName }
-        $encontrado2 = Get-ChildItem -Path $Global:WorldDir -Filter "Playerbots.conf" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        $encontrado2 = Get-ChildItem -LiteralPath $Global:WorldDir -Filter "playerbots.conf" -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
         if ($encontrado2) { return $encontrado2.FullName }
     } catch {}
     return $null
@@ -64,12 +92,22 @@ Function Obtener-RutaPlayerbotsConf {
 
 Function Abrir-PanelRates($parentForm) {
     $rutaConf = Obtener-RutaWorldConf
-    if (-not $rutaConf) {
-        [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgConfNoEncontrado" "No se pudo localizar el archivo worldserver.conf."), "Error", 'OK', 'Error')
+    if (-not $rutaConf -or -not (Test-Path -LiteralPath $rutaConf -PathType Leaf)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            (Obtener-Texto "MsgConfNoEncontrado" "No se pudo localizar el archivo worldserver.conf.") + "`n`nBusca normalmente en:`n  <WorldServer>\configs\worldserver.conf",
+            "Error", 'OK', 'Error')
         return
     }
 
-    $contenidoConf = Get-Content $rutaConf -Raw
+    try {
+        $contenidoConf = Get-Content -LiteralPath $rutaConf -Raw -ErrorAction Stop
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("No se pudo leer:`n$rutaConf`n`n$($_.Exception.Message)", "Error", 'OK', 'Error')
+        return
+    }
+    if (-not $contenidoConf -or $contenidoConf.Trim().Length -lt 20) {
+        [System.Windows.Forms.MessageBox]::Show("El archivo parece vacio o no es un conf valido:`n$rutaConf", "Error", 'OK', 'Warning')
+    }
 
     # Playerbots (opcional): si no existe el conf del mod, la seccion se muestra deshabilitada
     $rutaPlayerbots = Obtener-RutaPlayerbotsConf
@@ -79,7 +117,8 @@ Function Abrir-PanelRates($parentForm) {
     }
 
     Function Leer-ValorConf($clave) {
-        $patron = "(?m)^$([regex]::Escape($clave))\s*=\s*([\d\.]+)"
+        if (-not $contenidoConf) { return 0 }
+        $patron = '(?m)^\s*' + [regex]::Escape($clave) + '\s*=\s*([\d\.]+)'
         if ($contenidoConf -match $patron) { return [double]$Matches[1] }
         return 0
     }
@@ -400,6 +439,19 @@ Function Abrir-PanelRates($parentForm) {
     $btnGuardar.Font = $fGroup
     $btnGuardar.Add_Click({
         try {
+            if (-not $rutaConf -or -not (Test-Path -LiteralPath $rutaConf -PathType Leaf)) {
+                [System.Windows.Forms.MessageBox]::Show(
+                    (Obtener-Texto "MsgConfNoEncontrado" "No se pudo localizar el archivo worldserver.conf.") + "`n`nRuta: $rutaConf",
+                    "Error", 'OK', 'Error')
+                return
+            }
+            if (-not $contenidoConf) {
+                [System.Windows.Forms.MessageBox]::Show(
+                    "El archivo de configuracion esta vacio o no se pudo leer:`n$rutaConf",
+                    "Error", 'OK', 'Error')
+                return
+            }
+
             $nuevoContenido = $contenidoConf
             $todosCampos = @{}
             foreach ($clave in $CamposRates.Keys) { $todosCampos[$clave] = $CamposRates[$clave] }
@@ -410,8 +462,8 @@ Function Abrir-PanelRates($parentForm) {
                 $valorNumerico = 0
                 if (-not [int]::TryParse($textoEscrito, [ref]$valorNumerico)) { $valorNumerico = 0 }
                 $valorTexto = [string]$valorNumerico
-                $patron = "(?m)^($([regex]::Escape($clave))\s*=\s*)\S+"
-                $nuevoContenido = $nuevoContenido -replace $patron, "`${1}$valorTexto"
+                $patron = '(?m)^(\s*' + [regex]::Escape($clave) + '\s*=\s*)\S+'
+                $nuevoContenido = $nuevoContenido -replace $patron, ('${1}' + $valorTexto)
             }
 
             foreach ($clave in $CamposDecimales.Keys) {
@@ -423,43 +475,51 @@ Function Abrir-PanelRates($parentForm) {
                 } else {
                     $valorTexto = $valorDecimal.ToString([System.Globalization.CultureInfo]::InvariantCulture)
                 }
-                $patron = "(?m)^($([regex]::Escape($clave))\s*=\s*)\S+"
-                $nuevoContenido = $nuevoContenido -replace $patron, "`${1}$valorTexto"
+                $patron = '(?m)^(\s*' + [regex]::Escape($clave) + '\s*=\s*)\S+'
+                $nuevoContenido = $nuevoContenido -replace $patron, ('${1}' + $valorTexto)
             }
-            Set-Content -Path $rutaConf -Value $nuevoContenido -NoNewline -Encoding UTF8
+
+            try {
+                [System.IO.File]::WriteAllText($rutaConf, $nuevoContenido)
+            } catch {
+                $msgAcceso = "No se pudo escribir en:`n$rutaConf`n`n$($_.Exception.Message)`n`nSugerencias:`n- Cierra el WorldServer (puede bloquear el archivo)`n- Ejecuta el panel como administrador`n- Comprueba que la ruta sea un archivo worldserver.conf y no una carpeta"
+                [System.Windows.Forms.MessageBox]::Show($msgAcceso, "Error", 'OK', 'Error')
+                return
+            }
             $contenidoConf = $nuevoContenido
 
-            # Guardar Playerbots.conf si existe y hay campos
             $msgExtra = ""
-            if ($rutaPlayerbots -and $contenidoPlayerbots -and $CamposPlayerbots.Count -gt 0) {
+            if ($rutaPlayerbots -and (Test-Path -LiteralPath $rutaPlayerbots -PathType Leaf) -and $contenidoPlayerbots -and $CamposPlayerbots.Count -gt 0) {
                 $nuevoBots = $contenidoPlayerbots
                 foreach ($clave in $CamposPlayerbots.Keys) {
                     $textoEscrito = $CamposPlayerbots[$clave].Text.Trim()
                     $valorNumerico = 0
                     if (-not [int]::TryParse($textoEscrito, [ref]$valorNumerico)) { $valorNumerico = 0 }
-                    # DeleteRandomBotAccounts solo 0 o 1
                     if ($clave -eq "AiPlayerbot.DeleteRandomBotAccounts") {
                         if ($valorNumerico -ne 0) { $valorNumerico = 1 }
                     }
                     $valorTexto = [string]$valorNumerico
-                    $patron = "(?m)^($([regex]::Escape($clave))\s*=\s*)\S+"
+                    $patron = '(?m)^(\s*' + [regex]::Escape($clave) + '\s*=\s*)\S+'
                     if ($nuevoBots -match $patron) {
-                        $nuevoBots = $nuevoBots -replace $patron, "`${1}$valorTexto"
+                        $nuevoBots = $nuevoBots -replace $patron, ('${1}' + $valorTexto)
                     } else {
-                        # Si la clave no existe, la añadimos al final
                         $nuevoBots = $nuevoBots.TrimEnd() + "`r`n$clave = $valorTexto`r`n"
                     }
                 }
-                Set-Content -Path $rutaPlayerbots -Value $nuevoBots -NoNewline -Encoding UTF8
-                $contenidoPlayerbots = $nuevoBots
-                $msgExtra = "`n" + (Obtener-Texto "MsgPlayerbotsGuardado" "Playerbots.conf tambien actualizado.")
+                try {
+                    [System.IO.File]::WriteAllText($rutaPlayerbots, $nuevoBots)
+                    $contenidoPlayerbots = $nuevoBots
+                    $msgExtra = "`n" + (Obtener-Texto "MsgPlayerbotsGuardado" "Playerbots.conf tambien actualizado.")
+                } catch {
+                    $msgExtra = "`n(Playerbots no guardado: $($_.Exception.Message))"
+                }
             }
 
             [System.Windows.Forms.MessageBox]::Show(
-                ((Obtener-Texto "MsgRatesGuardado" "Rates guardados correctamente en el archivo de configuracion!") + $msgExtra),
+                ((Obtener-Texto "MsgRatesGuardado" "Rates guardados correctamente en el archivo de configuracion!") + "`n`n$rutaConf" + $msgExtra),
                 "OK", 'OK', 'Information')
         } catch {
-            [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgRatesError" "Error al guardar los rates.") + "`n`n" + $_.Exception.Message, "Error", 'OK', 'Error')
+            [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgRatesError" "Error al guardar los rates.") + "`n`n" + $_.Exception.Message + "`n`nRuta conf: $rutaConf", "Error", 'OK', 'Error')
         }
     }.GetNewClosure())
     $subForm.Controls.Add($btnGuardar)

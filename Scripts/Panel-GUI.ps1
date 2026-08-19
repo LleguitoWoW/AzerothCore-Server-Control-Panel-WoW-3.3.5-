@@ -20,6 +20,9 @@ try {
     $DescargasScript = Join-Path $Global:RootDir "descargas.ps1"
     $RatesScript = Join-Path $Global:RootDir "rates.ps1"
     $ArmeriaScript = Join-Path $Global:RootDir "armeria.ps1"
+    $TransmogScript = Join-Path $Global:RootDir "Transmog.ps1"
+    $EstablosScript = Join-Path $Global:RootDir "Establos.ps1"
+    $RealmScript = Join-Path $Global:RootDir "realm.ps1"
 
     # =========================================================================
     # CARGA SEGURA DE MÓDULOS EN UTF-8 (Evita errores en 'ñ', '¡' y acentos)
@@ -71,6 +74,41 @@ try {
         } catch {
             [System.Windows.Forms.MessageBox]::Show(
                 "No se pudo cargar armeria.ps1.`n`nError: $($_.Exception.Message)",
+                "Aviso", 'OK', 'Warning')
+        }
+    }
+
+    # Transmog despues de Armeria (reutiliza Consulta-Armeria / iconos)
+    if (Test-Path $TransmogScript) {
+        try {
+            $contenidoTransmog = Get-Content $TransmogScript -Raw -Encoding UTF8
+            Invoke-Expression $contenidoTransmog
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                "No se pudo cargar Transmog.ps1.`n`nError: $($_.Exception.Message)",
+                "Aviso", 'OK', 'Warning')
+        }
+    }
+
+    # Establos (monturas + mascotas de compania)
+    if (Test-Path $EstablosScript) {
+        try {
+            $contenidoEstablos = Get-Content $EstablosScript -Raw -Encoding UTF8
+            Invoke-Expression $contenidoEstablos
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                "No se pudo cargar Establos.ps1.`n`nError: $($_.Exception.Message)",
+                "Aviso", 'OK', 'Warning')
+        }
+    }
+
+    if (Test-Path $RealmScript) {
+        try {
+            $contenidoRealm = Get-Content $RealmScript -Raw -Encoding UTF8
+            Invoke-Expression $contenidoRealm
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                "No se pudo cargar realm.ps1.`n`nError: $($_.Exception.Message)",
                 "Aviso", 'OK', 'Warning')
         }
     }
@@ -139,6 +177,63 @@ try {
             return $Global:Textos[$idioma][$clave]
         }
         return $defecto
+    }
+
+    # ==========================================
+    # ACTUALIZACIONES DEL PANEL (version remota)
+    # ==========================================
+    # Sube version.json a tu GitHub (raw) y cambia esta URL si hace falta.
+    # Formato del JSON:
+    #   { "version": "2.3", "url": "https://github.com/.../releases/latest", "notas": "..." }
+    $Global:PanelVersion   = "2.5.0"
+    $Global:PanelUpdateUrl = "https://raw.githubusercontent.com/LleguitoWoW/Panel-Control/main/version.json"
+
+    Function Comparar-VersionPanel($local, $remota) {
+        try {
+            $vL = [version](($local -replace '[^\d\.]', '') -replace '^\.+|\.+$', '')
+            $vR = [version](($remota -replace '[^\d\.]', '') -replace '^\.+|\.+$', '')
+            return ($vR -gt $vL)
+        } catch {
+            return ($remota -ne $local -and "$remota" -gt "$local")
+        }
+    }
+
+    Function Comprobar-ActualizacionPanel {
+        try {
+            if (-not $Global:PanelUpdateUrl) { return }
+            $wc = New-Object System.Net.WebClient
+            $wc.Encoding = [System.Text.Encoding]::UTF8
+            $wc.Headers.Add("User-Agent", "PanelControl/$($Global:PanelVersion)")
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            $jsonTxt = $wc.DownloadString($Global:PanelUpdateUrl)
+            if (-not $jsonTxt) { return }
+            $info = $jsonTxt | ConvertFrom-Json
+            if (-not $info -or -not $info.version) { return }
+
+            $verRemota = [string]$info.version
+            if (-not (Comparar-VersionPanel $Global:PanelVersion $verRemota)) { return }
+
+            $notas = if ($info.notas) { [string]$info.notas } else { "" }
+            $urlDescarga = if ($info.url) { [string]$info.url } else { "" }
+
+            $titulo = Obtener-Texto "TituloActualizacion" "Actualizacion disponible"
+            $msg = ((Obtener-Texto "MsgActualizacionDisponible" "Hay una nueva version del panel.`n`nTu version: {0}`nNueva version: {1}") -f $Global:PanelVersion, $verRemota)
+            if ($notas) {
+                $msg += "`n`n" + (Obtener-Texto "MsgActualizacionNotas" "Novedades:") + "`n$notas"
+            }
+            $msg += "`n`n" + (Obtener-Texto "MsgActualizacionPregunta" "¿Quieres abrir la pagina de descarga?")
+
+            $resp = [System.Windows.Forms.MessageBox]::Show(
+                $msg, $titulo,
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+            if ($resp -eq [System.Windows.Forms.DialogResult]::Yes -and $urlDescarga) {
+                try { Start-Process $urlDescarga } catch {}
+            }
+        } catch {
+            # Sin internet / 404 / JSON invalido -> silencio
+        }
     }
 
     Function Cargar-Configuracion {
@@ -346,41 +441,28 @@ try {
     Cargar-Configuracion
 
     # ==========================================
-    # DISEÑO DE LA INTERFAZ GRÁFICA (Ajustado)
+    # DISEÑO DE LA INTERFAZ (v2 - nucleo + lateral)
     # ==========================================
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Panel de Control - Lleguito"
-    $form.Size = New-Object System.Drawing.Size(680, 741) # Ensanchado para alojar los 3 botones limpios + descarga HD + rates + npcbots + credenciales mysql + mods + armeria
+    $form.Size = New-Object System.Drawing.Size(920, 635)
     $form.StartPosition = 'CenterScreen'
     $form.BackColor = [System.Drawing.Color]::FromArgb(22, 22, 26)
     $form.ForeColor = [System.Drawing.Color]::White
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox = $false
 
-    # Paleta de acento reutilizable en toda la interfaz
     $ColorAcento = [System.Drawing.Color]::FromArgb(94, 129, 244)
     $ColorAcentoSuave = [System.Drawing.Color]::FromArgb(150, 160, 175)
+    $ColorLateral = [System.Drawing.Color]::FromArgb(28, 28, 34)
+    $ColorLateralBtn = [System.Drawing.Color]::FromArgb(40, 40, 48)
 
-    $fontTitulo = New-Object System.Drawing.Font("Segoe UI", 15, [System.Drawing.FontStyle]::Bold)
+    $fontTitulo = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
     $fontNormal = New-Object System.Drawing.Font("Segoe UI", 10)
     $fontEstado = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $fontSeccion = New-Object System.Drawing.Font("Segoe UI Semibold", 9)
+    $fontLateral = New-Object System.Drawing.Font("Segoe UI", 9)
 
-    $lblTitulo = New-Object System.Windows.Forms.Label
-    $lblTitulo.Font = $fontTitulo
-    $lblTitulo.ForeColor = [System.Drawing.Color]::White
-    $lblTitulo.AutoSize = $true
-    $lblTitulo.Location = New-Object System.Drawing.Point(50, 18)
-    $form.Controls.Add($lblTitulo)
-
-    # Linea de acento bajo el titulo, para dar un punto de color de marca
-    $lineaAcentoTitulo = New-Object System.Windows.Forms.Panel
-    $lineaAcentoTitulo.Location = New-Object System.Drawing.Point(50, 48)
-    $lineaAcentoTitulo.Size = New-Object System.Drawing.Size(60, 3)
-    $lineaAcentoTitulo.BackColor = $ColorAcento
-    $form.Controls.Add($lineaAcentoTitulo)
-
-    # Funciones auxiliares para el efecto visual al pasar el raton por los botones
     Function Aclarar-Color($color, $cantidad) {
         $r = [Math]::Min(255, $color.R + $cantidad)
         $g = [Math]::Min(255, $color.G + $cantidad)
@@ -394,10 +476,267 @@ try {
         return [System.Drawing.Color]::FromArgb($r, $g, $b)
     }
 
+    # --- Iconos Blizz-like (cache local) ---
+    Function Obtener-IconoPanel($nombreIcono, $tamanio) {
+        try {
+            $sz = 26
+            try { if ($tamanio -gt 0) { $sz = [int]$tamanio } } catch {}
+            if (-not $nombreIcono) { return $null }
+            $nom = [string]$nombreIcono.Trim()
+            $nomLow = $nom.ToLower()
+
+            # Alias cortos del menu lateral -> icono Wowhead si no hay PNG propio
+            $aliasWow = @{
+                "config" = "trade_engineering"
+                "cuentas" = "inv_misc_groupneedmore"
+                "armeria" = "inv_misc_head_dragon_01"
+                "personajes" = "inv_misc_book_09"
+                "descargas" = "inv_crate_04"
+                "npcbots" = "ability_hunter_pet_spider"
+                "mods" = "inv_misc_wrench_01"
+                "reino" = "inv_misc_map_01"
+            }
+            $nomWow = $nomLow
+            if ($aliasWow.ContainsKey($nomLow)) { $nomWow = $aliasWow[$nomLow] }
+
+            # 1) Iconos PERSONALIZADOS: Imagenes\menu\
+            #    Acepta: menu_armeria.png, armeria.png, o el nombre completo del icono wow
+            #    Formatos: .png .jpg .jpeg .bmp .gif
+            $dirsCustom = @()
+            if ($Global:ImgDir) { $dirsCustom += (Join-Path $Global:ImgDir "menu") }
+            if ($Global:AppRoot) { $dirsCustom += (Join-Path $Global:AppRoot "Imagenes\menu") }
+            if ($Global:RootDir) {
+                $dirsCustom += (Join-Path $Global:RootDir "Armeria\Imagenes\menu")
+                $dirsCustom += (Join-Path (Split-Path -Parent $Global:RootDir) "Imagenes\menu")
+            }
+            $candidatos = @(
+                $nom,
+                ($nomLow),
+                ("menu_" + $nomLow),
+                ($nomLow -replace '^menu_',''),
+                ($nomLow -replace '^inv_',''),
+                ($nomLow -replace '^ability_',''),
+                ($nomLow -replace '^spell_','')
+            ) | Select-Object -Unique
+            $exts = @(".png",".jpg",".jpeg",".bmp",".gif")
+            foreach ($dir in $dirsCustom) {
+                if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { continue }
+                foreach ($c in $candidatos) {
+                    foreach ($ext in $exts) {
+                        $fp = Join-Path $dir ($c + $ext)
+                        if (Test-Path -LiteralPath $fp) {
+                            try {
+                                $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $fp).Path)
+                                $bmp = New-Object System.Drawing.Bitmap $img, $sz, $sz
+                                $img.Dispose()
+                                return $bmp
+                            } catch {}
+                        }
+                    }
+                }
+            }
+
+            # 2) Cache Wowhead / ZAM (Armeria\Imagenes\ui)
+            $base = $Global:RootDir
+            if (-not $base) { return $null }
+            $cacheDir = Join-Path $base "Armeria\Imagenes\ui"
+            if (-not (Test-Path $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force -ErrorAction SilentlyContinue | Out-Null }
+            $cacheFile = Join-Path $cacheDir ("{0}.jpg" -f $nomWow)
+            if (-not (Test-Path -LiteralPath $cacheFile)) {
+                try {
+                    $wc = New-Object System.Net.WebClient
+                    $wc.Headers.Add("User-Agent", "Mozilla/5.0")
+                    $bytes = $null
+                    foreach ($sn in @("medium","large","small")) {
+                        try {
+                            $bytes = $wc.DownloadData("https://wow.zamimg.com/images/wow/icons/$sn/$nomWow.jpg")
+                            if ($bytes -and $bytes.Length -gt 50) { break }
+                            $bytes = $null
+                        } catch { $bytes = $null }
+                    }
+                    if ($bytes) { [System.IO.File]::WriteAllBytes($cacheFile, $bytes) }
+                } catch {}
+            }
+            if (Test-Path -LiteralPath $cacheFile) {
+                $img = [System.Drawing.Image]::FromFile($cacheFile)
+                $bmp = New-Object System.Drawing.Bitmap $img, $sz, $sz
+                $img.Dispose()
+                return $bmp
+            }
+        } catch {}
+        return $null
+    }
+
+    # --- Panel lateral izquierdo ---
+    $panelLateral = New-Object System.Windows.Forms.Panel
+    $panelLateral.Location = New-Object System.Drawing.Point(0, 0)
+    $panelLateral.Size = New-Object System.Drawing.Size(168, 605)
+    $panelLateral.BackColor = $ColorLateral
+    $form.Controls.Add($panelLateral)
+
+    $lblLateralTit = New-Object System.Windows.Forms.Label
+    $lblLateralTit.Text = "MENU"
+    $lblLateralTit.Location = New-Object System.Drawing.Point(12, 14)
+    $lblLateralTit.Size = New-Object System.Drawing.Size(140, 20)
+    $lblLateralTit.Font = $fontSeccion
+    $lblLateralTit.ForeColor = $ColorAcentoSuave
+    $panelLateral.Controls.Add($lblLateralTit)
+
+    Function Crear-BotonLateral($texto, $y, $iconName, $colorAccent, $accion) {
+        $btn = New-Object System.Windows.Forms.Button
+        $btn.Text = "  $texto"
+        $btn.Location = New-Object System.Drawing.Point(8, $y)
+        $btn.Size = New-Object System.Drawing.Size(152, 42)
+        $btn.BackColor = $ColorLateralBtn
+        $btn.ForeColor = [System.Drawing.Color]::White
+        $btn.FlatStyle = 'Flat'
+        $btn.FlatAppearance.BorderSize = 1
+        $btn.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(55, 55, 65)
+        $btn.FlatAppearance.MouseOverBackColor = Aclarar-Color $ColorLateralBtn 18
+        $btn.FlatAppearance.MouseDownBackColor = Oscurecer-Color $ColorLateralBtn 12
+        $btn.Font = $fontLateral
+        $btn.TextAlign = 'MiddleLeft'
+        $btn.ImageAlign = 'MiddleLeft'
+        $btn.TextImageRelation = 'ImageBeforeText'
+        $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
+        $btn.Padding = New-Object System.Windows.Forms.Padding(4, 0, 0, 0)
+        try {
+            $ic = Obtener-IconoPanel $iconName 26
+            if ($ic) { $btn.Image = $ic }
+        } catch {}
+        $btn.Add_Click($accion)
+        $panelLateral.Controls.Add($btn)
+        return $btn
+    }
+
+    # Submenus (ventanas pequenas)
+    Function Abrir-MenuPersonajes {
+        # Solo pdump / gestion de personajes (Armeria tiene boton propio)
+        if (Get-Command Abrir-PanelPersonajes -ErrorAction SilentlyContinue) {
+            Abrir-PanelPersonajes $form
+        } else {
+            [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgPersonajesNoModulo" "No se cargo personajes.ps1"), (Obtener-Texto "BtnPersonajes" "Personajes"), 'OK', 'Error')
+        }
+    }
+
+    Function Abrir-MenuNPCBots {
+        $mf = New-Object System.Windows.Forms.Form
+        $mf.Text = "NPCBots"
+        $mf.Size = New-Object System.Drawing.Size(360, 180)
+        $mf.StartPosition = 'CenterParent'
+        $mf.BackColor = [System.Drawing.Color]::FromArgb(22, 22, 26)
+        $mf.ForeColor = [System.Drawing.Color]::White
+        $mf.FormBorderStyle = 'FixedDialog'
+        $mf.MaximizeBox = $false
+        $b1 = New-Object System.Windows.Forms.Button
+        $b1.Text = Obtener-Texto "BtnNPCBots" "Generador de NPCBots"
+        $b1.Location = New-Object System.Drawing.Point(30, 30)
+        $b1.Size = New-Object System.Drawing.Size(280, 36)
+        $b1.BackColor = [System.Drawing.Color]::FromArgb(150, 40, 40)
+        $b1.ForeColor = [System.Drawing.Color]::White
+        $b1.FlatStyle = 'Flat'
+        $b1.Add_Click({
+            $mf.Close()
+            $rutaHtmlBots = Join-Path $Global:RootDir "NPCBotsGenerator.html"
+            if (Test-Path $rutaHtmlBots) {
+                $aviso = Obtener-Texto "MsgAvisoNPCBots" "AVISO: requiere mod-npcbots instalado. Abrir generador?"
+                $r = [System.Windows.Forms.MessageBox]::Show($aviso, "NPCBots", 'YesNo', 'Warning')
+                if ($r -eq 'Yes') { Start-Process $rutaHtmlBots }
+            } else {
+                [System.Windows.Forms.MessageBox]::Show("No se encontro NPCBotsGenerator.html", "Error", 'OK', 'Error')
+            }
+        })
+        $mf.Controls.Add($b1)
+        $b2 = New-Object System.Windows.Forms.Button
+        $b2.Text = Obtener-Texto "BtnInyectarSqlPrincipal" "Inyectar SQL"
+        $b2.Location = New-Object System.Drawing.Point(30, 80)
+        $b2.Size = New-Object System.Drawing.Size(280, 36)
+        $b2.BackColor = [System.Drawing.Color]::FromArgb(60, 100, 160)
+        $b2.ForeColor = [System.Drawing.Color]::White
+        $b2.FlatStyle = 'Flat'
+        $b2.Add_Click({ $mf.Close(); Abrir-PanelInyectarSQL $form })
+        $mf.Controls.Add($b2)
+        [void]$mf.ShowDialog($form)
+    }
+
+    Function Abrir-MenuConfig {
+        $mf = New-Object System.Windows.Forms.Form
+        $mf.Text = Obtener-Texto "BtnConfig" "Configuracion"
+        $mf.Size = New-Object System.Drawing.Size(360, 180)
+        $mf.StartPosition = 'CenterParent'
+        $mf.BackColor = [System.Drawing.Color]::FromArgb(22, 22, 26)
+        $mf.ForeColor = [System.Drawing.Color]::White
+        $mf.FormBorderStyle = 'FixedDialog'
+        $mf.MaximizeBox = $false
+        $b1 = New-Object System.Windows.Forms.Button
+        $b1.Text = Obtener-Texto "BtnConfig" "Cambiar Rutas"
+        $b1.Location = New-Object System.Drawing.Point(30, 30)
+        $b1.Size = New-Object System.Drawing.Size(280, 36)
+        $b1.BackColor = [System.Drawing.Color]::FromArgb(70, 70, 78)
+        $b1.ForeColor = [System.Drawing.Color]::White
+        $b1.FlatStyle = 'Flat'
+        $b1.Add_Click({ $mf.Close(); Configurar-Rutas })
+        $mf.Controls.Add($b1)
+        $b2 = New-Object System.Windows.Forms.Button
+        $b2.Text = Obtener-Texto "BtnCredencialesMysql" "Credenciales MySQL"
+        $b2.Location = New-Object System.Drawing.Point(30, 80)
+        $b2.Size = New-Object System.Drawing.Size(280, 36)
+        $b2.BackColor = [System.Drawing.Color]::FromArgb(70, 70, 78)
+        $b2.ForeColor = [System.Drawing.Color]::White
+        $b2.FlatStyle = 'Flat'
+        $b2.Add_Click({ $mf.Close(); Configurar-CredencialesMysql })
+        $mf.Controls.Add($b2)
+        [void]$mf.ShowDialog($form)
+    }
+
+    $script:BtnLatConfig = Crear-BotonLateral "Rutas / Config" 42 "config" $ColorAcento { Abrir-MenuConfig }
+    $script:BtnLatCuentas = Crear-BotonLateral "Cuentas" 90 "cuentas" $ColorAcento { Abrir-PanelCuentas $form }
+    $script:BtnLatArmeria = Crear-BotonLateral "Armeria" 138 "armeria" $ColorAcento {
+        if (Get-Command Abrir-PanelArmeria -ErrorAction SilentlyContinue) {
+            Abrir-PanelArmeria $form
+        } else {
+            [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgArmeriaNoModulo" "No se cargo armeria.ps1"), (Obtener-Texto "BtnArmeria" "Armeria"), 'OK', 'Error')
+        }
+    }
+    $script:BtnLatPers = Crear-BotonLateral "Personajes" 186 "personajes" $ColorAcento { Abrir-MenuPersonajes }
+    $script:BtnLatDesc = Crear-BotonLateral "Descargas" 234 "descargas" $ColorAcento { Abrir-PanelDescargas $form }
+    $script:BtnLatBots = Crear-BotonLateral "NPCBots" 282 "npcbots" $ColorAcento { Abrir-MenuNPCBots }
+    $script:BtnLatMods = Crear-BotonLateral "Mods" 330 "mods" $ColorAcento {
+        if ($Global:ModsDir -and (Test-Path $Global:ModsDir)) {
+            Start-Process explorer.exe $Global:ModsDir
+        } else {
+            [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgModsNoExiste" "La carpeta de mods no existe. Configura rutas."), "Mods", 'OK', 'Error')
+            $Global:ModsDir = ""
+        }
+    }
+    $script:BtnLatReino = Crear-BotonLateral "Reino" 378 "reino" $ColorAcento {
+        if (Get-Command Abrir-PanelReino -ErrorAction SilentlyContinue) {
+            Abrir-PanelReino $form
+        } else {
+            [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgReinoNoModulo" "No se encontro realm.ps1 en la carpeta Scripts."), (Obtener-Texto "TituloReino" "Reino"), 'OK', 'Error')
+        }
+    }
+
+    # --- Zona nucleo (derecha del lateral) ---
+    $OX = 185  # offset X del nucleo
+
+    $lblTitulo = New-Object System.Windows.Forms.Label
+    $lblTitulo.Font = $fontTitulo
+    $lblTitulo.ForeColor = [System.Drawing.Color]::White
+    $lblTitulo.AutoSize = $true
+    $lblTitulo.Location = New-Object System.Drawing.Point(($OX + 10), 14)
+    $form.Controls.Add($lblTitulo)
+
+    $lineaAcentoTitulo = New-Object System.Windows.Forms.Panel
+    $lineaAcentoTitulo.Location = New-Object System.Drawing.Point(($OX + 10), 42)
+    $lineaAcentoTitulo.Size = New-Object System.Drawing.Size(60, 3)
+    $lineaAcentoTitulo.BackColor = $ColorAcento
+    $form.Controls.Add($lineaAcentoTitulo)
+
     Function Crear-PanelServicio($nombre, $y) {
         $lbl = New-Object System.Windows.Forms.Label
         $lbl.Text = $nombre
-        $lbl.Location = New-Object System.Drawing.Point(50, $y)
+        $lbl.Location = New-Object System.Drawing.Point(($OX + 10), $y)
         $lbl.Font = $fontNormal
         $lbl.ForeColor = [System.Drawing.Color]::FromArgb(225, 225, 230)
         $lbl.AutoSize = $true
@@ -405,19 +744,18 @@ try {
 
         $estado = New-Object System.Windows.Forms.Label
         $estado.Text = "Offline"
-        $estado.Location = New-Object System.Drawing.Point(165, $y)
+        $estado.Location = New-Object System.Drawing.Point(($OX + 130), $y)
         $estado.Font = $fontEstado
         $estado.ForeColor = [System.Drawing.Color]::FromArgb(230, 90, 90)
         $estado.AutoSize = $true
         $form.Controls.Add($estado)
-
         return $estado
     }
 
-    $luzMysql = Crear-PanelServicio "MySQL" 80
-    $luzAuth = Crear-PanelServicio "AuthServer" 120
-    $luzWorld = Crear-PanelServicio "WorldServer" 160
-    $luzWow = Crear-PanelServicio "World of Warcraft" 200
+    $luzMysql = Crear-PanelServicio "MySQL" 60
+    $luzAuth = Crear-PanelServicio "AuthServer" 100
+    $luzWorld = Crear-PanelServicio "WorldServer" 140
+    $luzWow = Crear-PanelServicio "World of Warcraft" 180
 
     Function Crear-Boton($texto, $x, $y, $color, $accion) {
         $btn = New-Object System.Windows.Forms.Button
@@ -436,164 +774,174 @@ try {
         return $btn
     }
 
-    $btnStartMysql = Crear-Boton "" 240 80 ([System.Drawing.Color]::SeaGreen) { Start-Process "$Global:MysqlDir\mysqld.exe" -ArgumentList "--console" -WorkingDirectory $Global:MysqlDir }
-    $btnStopMysql  = Crear-Boton "" 360 80 ([System.Drawing.Color]::IndianRed) { Stop-ProcesoMySQL }
+    $btnStartMysql = Crear-Boton "" ($OX + 230) 60 ([System.Drawing.Color]::SeaGreen) { Start-Process "$Global:MysqlDir\mysqld.exe" -ArgumentList "--console" -WorkingDirectory $Global:MysqlDir }
+    $btnStopMysql  = Crear-Boton "" ($OX + 340) 60 ([System.Drawing.Color]::IndianRed) { Stop-ProcesoMySQL }
 
-    $btnStartAuth = Crear-Boton "" 240 120 ([System.Drawing.Color]::SeaGreen) { Start-Process "$Global:AuthDir\authserver.exe" -WorkingDirectory $Global:AuthDir }
-    $btnStopAuth  = Crear-Boton "" 360 120 ([System.Drawing.Color]::IndianRed) { Stop-ProcesoSeguro "authserver" 20 }
+    $btnStartAuth = Crear-Boton "" ($OX + 230) 100 ([System.Drawing.Color]::SeaGreen) { Start-Process "$Global:AuthDir\authserver.exe" -WorkingDirectory $Global:AuthDir }
+    $btnStopAuth  = Crear-Boton "" ($OX + 340) 100 ([System.Drawing.Color]::IndianRed) { Stop-ProcesoSeguro "authserver" 20 }
 
-    $btnStartWorld = Crear-Boton "" 240 160 ([System.Drawing.Color]::SeaGreen) { Start-Process "$Global:WorldDir\worldserver.exe" -WorkingDirectory $Global:WorldDir }
-    $btnStopWorld  = Crear-Boton "" 360 160 ([System.Drawing.Color]::IndianRed) { Stop-ProcesoSeguro "worldserver" 30 }
+    $btnStartWorld = Crear-Boton "" ($OX + 230) 140 ([System.Drawing.Color]::SeaGreen) { Start-Process "$Global:WorldDir\worldserver.exe" -WorkingDirectory $Global:WorldDir }
+    $btnStopWorld  = Crear-Boton "" ($OX + 340) 140 ([System.Drawing.Color]::IndianRed) { Stop-ProcesoSeguro "worldserver" 30 }
 
-    $btnStartWow = Crear-Boton "" 240 200 ([System.Drawing.Color]::SteelBlue) { 
+    $btnStartWow = Crear-Boton "" ($OX + 230) 180 ([System.Drawing.Color]::SteelBlue) {
         if ($Global:WowExe) {
             $wowWorkingDir = Split-Path -Parent $Global:WowExe
-            Start-Process $Global:WowExe -WorkingDirectory $wowWorkingDir 
+            Start-Process $Global:WowExe -WorkingDirectory $wowWorkingDir
         }
     }
-    $btnStartWow.Size = New-Object System.Drawing.Size(220, 30)
+    $btnStartWow.Size = New-Object System.Drawing.Size(210, 30)
 
-    # Alineado en la misma columna que "Iniciar Juego", justo debajo, para no invadir la zona del icono
-    $btnRates = Crear-Boton "" 240 240 ([System.Drawing.Color]::FromArgb(90, 60, 150)) { Abrir-PanelRates $form }
-    $btnRates.Size = New-Object System.Drawing.Size(220, 30)
+    $btnRates = Crear-Boton "" ($OX + 230) 238 ([System.Drawing.Color]::FromArgb(90, 60, 150)) {
+        if (Get-Command Abrir-PanelRates -ErrorAction SilentlyContinue) {
+            Abrir-PanelRates $form
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("No se cargo rates.ps1", "Rates", 'OK', 'Error')
+        }
+    }
+    $btnRates.Size = New-Object System.Drawing.Size(210, 30)
 
-    $btnStartAll = Crear-Boton "" 50 300 ([System.Drawing.Color]::MediumSeaGreen) { Iniciar-Todo }
-    $btnStartAll.Size = New-Object System.Drawing.Size(270, 40)
-    $btnStartAll.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnStartAll = Crear-Boton "" ($OX + 10) 275 ([System.Drawing.Color]::DarkGreen) { Iniciar-Todo }
+    $btnStartAll.Size = New-Object System.Drawing.Size(200, 32)
+    $btnStartAll.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
 
-    $btnStopAll = Crear-Boton "" 340 300 ([System.Drawing.Color]::Firebrick) { Apagar-Todo }
-    $btnStopAll.Size = New-Object System.Drawing.Size(270, 40)
-    $btnStopAll.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnStopAll = Crear-Boton "" ($OX + 230) 275 ([System.Drawing.Color]::Firebrick) { Apagar-Todo }
+    $btnStopAll.Size = New-Object System.Drawing.Size(210, 32)
+    $btnStopAll.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
 
+    # Estado + barra bajo World of Warcraft: anchos alineados con la columna Offline (OX+130)
     $lblStatus = New-Object System.Windows.Forms.Label
-    $lblStatus.Location = New-Object System.Drawing.Point(50, 360)
-    $lblStatus.AutoSize = $true
-    $lblStatus.Font = $fontNormal
-    $lblStatus.ForeColor = [System.Drawing.Color]::FromArgb(200, 200, 205)
+    $lblStatus.Location = New-Object System.Drawing.Point(($OX + 10), 205)
+    $lblStatus.Size = New-Object System.Drawing.Size(200, 14)
+    $lblStatus.Font = New-Object System.Drawing.Font("Segoe UI", 7.5)
+    $lblStatus.ForeColor = [System.Drawing.Color]::FromArgb(180, 180, 185)
     $form.Controls.Add($lblStatus)
 
     $progressBar = New-Object System.Windows.Forms.ProgressBar
-    $progressBar.Location = New-Object System.Drawing.Point(50, 385)
-    $progressBar.Size = New-Object System.Drawing.Size(560, 25) # Ensanchado simétricamente
+    $progressBar.Location = New-Object System.Drawing.Point(($OX + 10), 220)
+    # Hasta ~ columna Offline del cliente WoW (estado en OX+130 + texto)
+    $progressBar.Size = New-Object System.Drawing.Size(175, 8)
     $progressBar.Style = 'Continuous'
     $form.Controls.Add($progressBar)
 
-    # BOTÓN DE ANCHO COMPLETO PARA LA ARMERÍA DE PERSONAJES
-    $btnArmeria = Crear-Boton "" 50 430 ([System.Drawing.Color]::FromArgb(150, 120, 20)) { Abrir-PanelArmeria $form }
-    $btnArmeria.Size = New-Object System.Drawing.Size(580, 30)
-    $btnArmeria.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+    # Idioma: banderas ES / EN (PNG en Imagenes\)
+    $script:ColorIdiomaActivo   = [System.Drawing.Color]::FromArgb(50, 110, 70)
+    $script:ColorIdiomaInactivo = [System.Drawing.Color]::FromArgb(45, 45, 52)
 
-    # RE-DISTRIBUCIÓN INFERIOR DE 3 BOTONES COMPACTOS (Ancho 180px c/u, separación de 20px)
-    $btnConfig = Crear-Boton "" 50 468 ([System.Drawing.Color]::FromArgb(70, 70, 78)) { Configurar-Rutas }
-    $btnConfig.Size = New-Object System.Drawing.Size(180, 32)
-
-    $btnCuentas = Crear-Boton "" 250 468 ([System.Drawing.Color]::FromArgb(60, 100, 160)) { Abrir-PanelCuentas $form }
-    $btnCuentas.Size = New-Object System.Drawing.Size(180, 32)
-
-    $btnPersonajes = Crear-Boton "" 450 468 ([System.Drawing.Color]::FromArgb(140, 75, 150)) { Abrir-PanelPersonajes $form }
-    $btnPersonajes.Size = New-Object System.Drawing.Size(180, 32)
-
-    # BOTÓN DE ANCHO COMPLETO PARA DESCARGAR EL CLIENTE HD
-    $btnDescargarHD = Crear-Boton "" 50 530 ([System.Drawing.Color]::FromArgb(200, 140, 20)) { Abrir-PanelDescargas $form }
-    $btnDescargarHD.Size = New-Object System.Drawing.Size(580, 30)
-    $btnDescargarHD.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-
-    # SEPARADOR VISUAL DE SECCIÓN (línea + texto + línea, en vez de guiones ASCII)
-    $lineaSepIzq = New-Object System.Windows.Forms.Panel
-    $lineaSepIzq.Location = New-Object System.Drawing.Point(50, 576)
-    $lineaSepIzq.Size = New-Object System.Drawing.Size(215, 1)
-    $lineaSepIzq.BackColor = [System.Drawing.Color]::FromArgb(70, 70, 78)
-    $form.Controls.Add($lineaSepIzq)
-
-    $lblSeparadorBots = New-Object System.Windows.Forms.Label
-    $lblSeparadorBots.Text = Obtener-Texto "LblSeparadorNPCBots" "NPCBOTS"
-    $lblSeparadorBots.Location = New-Object System.Drawing.Point(275, 566)
-    $lblSeparadorBots.Size = New-Object System.Drawing.Size(130, 20)
-    $lblSeparadorBots.TextAlign = 'MiddleCenter'
-    $lblSeparadorBots.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    $lblSeparadorBots.ForeColor = $ColorAcentoSuave
-    $form.Controls.Add($lblSeparadorBots)
-
-    $lineaSepDer = New-Object System.Windows.Forms.Panel
-    $lineaSepDer.Location = New-Object System.Drawing.Point(415, 576)
-    $lineaSepDer.Size = New-Object System.Drawing.Size(215, 1)
-    $lineaSepDer.BackColor = [System.Drawing.Color]::FromArgb(70, 70, 78)
-    $form.Controls.Add($lineaSepDer)
-
-    # BOTÓN DE ANCHO COMPLETO PARA EL GENERADOR DE NPCBOTS (requiere modulo mod-npcbots)
-    $btnNPCBots = Crear-Boton "" 50 592 ([System.Drawing.Color]::FromArgb(150, 40, 40)) {
-        $confirmacion = [System.Windows.Forms.MessageBox]::Show(
-            (Obtener-Texto "MsgAvisoNPCBots" "AVISO OBLIGATORIO: este generador solo funciona en servidores AzerothCore que tengan instalado el modulo NPCBots (mod-npcbots). Si tu servidor NO lo tiene instalado, el SQL generado no servira de nada y podria dar errores al inyectarlo. Deseas abrir el generador?"),
-            (Obtener-Texto "TituloAviso" "Aviso"), 'YesNo', 'Warning')
-        if ($confirmacion -eq 'Yes') {
-            $rutaHtmlBots = Join-Path $Global:RootDir "NPCBotsGenerator.html"
-            if (Test-Path $rutaHtmlBots) {
-                Start-Process $rutaHtmlBots
-            } else {
-                [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgNPCBotsNoEncontrado" "No se encontro el archivo NPCBotsGenerator.html en la carpeta Scripts."), "Error", 'OK', 'Error')
+    Function Cargar-IconoBandera($nombreArchivo) {
+        $rutas = @(
+            (Join-Path $Global:ImgDir $nombreArchivo),
+            (Join-Path $Global:AppRoot "Imagenes\$nombreArchivo"),
+            (Join-Path (Split-Path -Parent $Global:RootDir) "Imagenes\$nombreArchivo")
+        )
+        foreach ($r in $rutas) {
+            if ($r -and (Test-Path -LiteralPath $r)) {
+                try {
+                    $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $r).Path)
+                    # Redimensionar a 28x18 para el boton
+                    $bmp = New-Object System.Drawing.Bitmap 28, 18
+                    $g = [System.Drawing.Graphics]::FromImage($bmp)
+                    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                    $g.DrawImage($img, 0, 0, 28, 18)
+                    $g.Dispose()
+                    $img.Dispose()
+                    return $bmp
+                } catch {}
             }
         }
+        return $null
     }
-    $btnNPCBots.Size = New-Object System.Drawing.Size(280, 30)
-    $btnNPCBots.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
 
-    $btnInyectarSQL = Crear-Boton "" 350 592 ([System.Drawing.Color]::FromArgb(60, 100, 160)) { Abrir-PanelInyectarSQL $form }
-    $btnInyectarSQL.Size = New-Object System.Drawing.Size(280, 30)
-    $btnInyectarSQL.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-
-    # BOTÓN DE ANCHO COMPLETO PARA CONFIGURAR LAS CREDENCIALES DE MYSQL
-    $btnCredencialesMysql = Crear-Boton "" 50 630 ([System.Drawing.Color]::FromArgb(70, 70, 78)) { Configurar-CredencialesMysql }
-    $btnCredencialesMysql.Size = New-Object System.Drawing.Size(580, 30)
-    $btnCredencialesMysql.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-
-    # BOTÓN DE ANCHO COMPLETO PARA ABRIR LA CARPETA DE MODS
-    $btnMods = Crear-Boton "" 50 668 ([System.Drawing.Color]::FromArgb(60, 100, 160)) {
-        if (-not $Global:ModsDir -or -not (Test-Path $Global:ModsDir)) {
-            $carpetaElegida = Seleccionar-Carpeta (Obtener-Texto "TituloSeleccionarMods" "Selecciona la carpeta de Mods")
-            if ($carpetaElegida) {
-                $Global:ModsDir = $carpetaElegida
-                Guardar-Configuracion
-            } else {
-                return
-            }
-        }
-        if (Test-Path $Global:ModsDir) {
-            Start-Process "explorer.exe" -ArgumentList "`"$Global:ModsDir`""
+    Function Actualizar-EstiloBotonesIdioma {
+        if (-not $script:BtnLangES -or -not $script:BtnLangEN) { return }
+        if ($Global:Idioma -eq "EN") {
+            $script:BtnLangES.BackColor = $script:ColorIdiomaInactivo
+            $script:BtnLangEN.BackColor = $script:ColorIdiomaActivo
+            $script:BtnLangES.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(70, 70, 80)
+            $script:BtnLangEN.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(120, 200, 140)
         } else {
-            [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgModsCarpetaNoExiste" "La carpeta de Mods configurada ya no existe. Vuelve a pulsar el boton para seleccionarla de nuevo."), "Error", 'OK', 'Error')
-            $Global:ModsDir = ""
+            $script:BtnLangES.BackColor = $script:ColorIdiomaActivo
+            $script:BtnLangEN.BackColor = $script:ColorIdiomaInactivo
+            $script:BtnLangES.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(120, 200, 140)
+            $script:BtnLangEN.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(70, 70, 80)
         }
     }
-    $btnMods.Size = New-Object System.Drawing.Size(580, 30)
-    $btnMods.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
 
-    $btnIdioma = Crear-Boton "Idioma: $Global:Idioma" 540 18 ([System.Drawing.Color]::FromArgb(70, 70, 78)) {
-        if ($Global:Idioma -eq "ES") { $Global:Idioma = "EN" } else { $Global:Idioma = "ES" }
-        $btnIdioma.Text = "Idioma: $Global:Idioma"
-        Actualizar-Textos-Interfaz
-        Guardar-Configuracion
+    $imgFlagES = Cargar-IconoBandera "flag_es.png"
+    $imgFlagEN = Cargar-IconoBandera "flag_en.png"
+    $tipIdioma = New-Object System.Windows.Forms.ToolTip
+
+    $btnLangES = New-Object System.Windows.Forms.Button
+    $btnLangES.Text = ""
+    $btnLangES.Location = New-Object System.Drawing.Point(($OX + 400), 10)
+    $btnLangES.Size = New-Object System.Drawing.Size(40, 30)
+    $btnLangES.FlatStyle = 'Flat'
+    $btnLangES.FlatAppearance.BorderSize = 2
+    $btnLangES.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $btnLangES.TabStop = $false
+    if ($imgFlagES) {
+        $btnLangES.Image = $imgFlagES
+        $btnLangES.ImageAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    } else {
+        $btnLangES.Text = "ES"
+        $btnLangES.ForeColor = [System.Drawing.Color]::White
+        $btnLangES.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
     }
-    $btnIdioma.Size = New-Object System.Drawing.Size(100, 26)
+    $tipIdioma.SetToolTip($btnLangES, "Espanol (ES)")
+    $btnLangES.Add_Click({
+        if ($Global:Idioma -ne "ES") {
+            $Global:Idioma = "ES"
+            Actualizar-EstiloBotonesIdioma
+            Actualizar-Textos-Interfaz
+            Guardar-Configuracion
+        }
+    })
+    $form.Controls.Add($btnLangES)
+    $script:BtnLangES = $btnLangES
 
-    # ==========================================
-    # ICONO DEBAJO DEL SELECTOR DE IDIOMA (agregado, no modifica lo anterior)
-    # ==========================================
+    $btnLangEN = New-Object System.Windows.Forms.Button
+    $btnLangEN.Text = ""
+    $btnLangEN.Location = New-Object System.Drawing.Point(($OX + 444), 10)
+    $btnLangEN.Size = New-Object System.Drawing.Size(40, 30)
+    $btnLangEN.FlatStyle = 'Flat'
+    $btnLangEN.FlatAppearance.BorderSize = 2
+    $btnLangEN.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $btnLangEN.TabStop = $false
+    if ($imgFlagEN) {
+        $btnLangEN.Image = $imgFlagEN
+        $btnLangEN.ImageAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    } else {
+        $btnLangEN.Text = "EN"
+        $btnLangEN.ForeColor = [System.Drawing.Color]::White
+        $btnLangEN.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+    }
+    $tipIdioma.SetToolTip($btnLangEN, "English (EN)")
+    $btnLangEN.Add_Click({
+        if ($Global:Idioma -ne "EN") {
+            $Global:Idioma = "EN"
+            Actualizar-EstiloBotonesIdioma
+            Actualizar-Textos-Interfaz
+            Guardar-Configuracion
+        }
+    })
+    $form.Controls.Add($btnLangEN)
+    $script:BtnLangEN = $btnLangEN
+
+    Actualizar-EstiloBotonesIdioma
+    $btnIdioma = $btnLangES
+
+    # Icono decorativo + uptime a la derecha
     $IconoImagenPath = Join-Path $Global:ImgDir "icono.png"
     if (Test-Path $IconoImagenPath) {
         $picIcono = New-Object System.Windows.Forms.PictureBox
-        $picIcono.Location = New-Object System.Drawing.Point(490, 65)
+        $picIcono.Location = New-Object System.Drawing.Point(720, 55)
         $picIcono.Size = New-Object System.Drawing.Size(160, 160)
         $picIcono.SizeMode = 'Zoom'
         $picIcono.Image = [System.Drawing.Image]::FromFile($IconoImagenPath)
         $form.Controls.Add($picIcono)
     }
 
-    # ==========================================
-    # CONTADOR DE TIEMPO EN LINEA DEL WORLDSERVER
-    # (hueco libre bajo el icono, no interfiere con nada mas)
-    # ==========================================
     $lblUptimeTitulo = New-Object System.Windows.Forms.Label
-    $lblUptimeTitulo.Location = New-Object System.Drawing.Point(490, 232)
+    $lblUptimeTitulo.Location = New-Object System.Drawing.Point(720, 225)
     $lblUptimeTitulo.Size = New-Object System.Drawing.Size(160, 18)
     $lblUptimeTitulo.TextAlign = 'MiddleCenter'
     $lblUptimeTitulo.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
@@ -602,14 +950,370 @@ try {
 
     $lblWorldUptime = New-Object System.Windows.Forms.Label
     $lblWorldUptime.Text = "--:--:--"
-    $lblWorldUptime.Location = New-Object System.Drawing.Point(490, 250)
+    $lblWorldUptime.Location = New-Object System.Drawing.Point(720, 243)
     $lblWorldUptime.Size = New-Object System.Drawing.Size(160, 26)
     $lblWorldUptime.TextAlign = 'MiddleCenter'
     $lblWorldUptime.Font = New-Object System.Drawing.Font("Consolas", 14, [System.Drawing.FontStyle]::Bold)
     $lblWorldUptime.ForeColor = [System.Drawing.Color]::FromArgb(150, 150, 155)
     $form.Controls.Add($lblWorldUptime)
 
+    # ==========================================
+    # POBLACION DEL REINO (online)
+    # ==========================================
+    $lblPobTitulo = New-Object System.Windows.Forms.Label
+    $lblPobTitulo.Text = "Poblacion del reino"
+    $lblPobTitulo.Location = New-Object System.Drawing.Point(($OX + 10), 315)
+    $lblPobTitulo.Size = New-Object System.Drawing.Size(140, 18)
+    $lblPobTitulo.Font = $fontSeccion
+    $lblPobTitulo.ForeColor = $ColorAcentoSuave
+    $lblPobTitulo.AutoSize = $false
+    $form.Controls.Add($lblPobTitulo)
+
+    # Contadores pegados al boton Actualizar (sin solapar el titulo)
+    $lblPobCount = New-Object System.Windows.Forms.Label
+    $lblPobCount.Text = "Online: --"
+    $lblPobCount.Location = New-Object System.Drawing.Point(($OX + 150), 315)
+    $lblPobCount.Size = New-Object System.Drawing.Size(310, 18)
+    $lblPobCount.Font = $fontSeccion
+    $lblPobCount.ForeColor = [System.Drawing.Color]::FromArgb(100, 220, 120)
+    $lblPobCount.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
+    $form.Controls.Add($lblPobCount)
+
+    $btnPobRefresh = New-Object System.Windows.Forms.Button
+    $btnPobRefresh.Text = "Actualizar"
+    $btnPobRefresh.Location = New-Object System.Drawing.Point(($OX + 465), 312)
+    $btnPobRefresh.Size = New-Object System.Drawing.Size(78, 24)
+    $btnPobRefresh.BackColor = [System.Drawing.Color]::FromArgb(50, 50, 58)
+    $btnPobRefresh.ForeColor = [System.Drawing.Color]::White
+    $btnPobRefresh.FlatStyle = 'Flat'
+    $btnPobRefresh.FlatAppearance.BorderSize = 0
+    $btnPobRefresh.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $form.Controls.Add($btnPobRefresh)
+
+    # Filtro: Todos / Jugadores / Bots
+    $script:PobFiltro = "all"
+
+    # ==========================================
+    # CACHE DE "CONEXIONES" (evita que bots que comparten
+    # una misma cuenta se solapen/pisen entre si en el panel)
+    # ==========================================
+    # AzerothCore solo permite 1 personaje online por cuenta a la vez.
+    # Cuando varios bots comparten cuenta, el ultimo que "entra" hace
+    # que los anteriores pasen a online=0 en la BD, aunque sigan activos.
+    # Para no perder su fila, guardamos el ultimo estado visto de cada
+    # personaje y lo mantenemos unos cuantos refrescos (PobGraceTicks)
+    # aunque momentaneamente el SQL ya no lo marque como online.
+    $script:PobCache      = @{}   # Nombre -> datos + ultimo tick visto
+    $script:PobTick       = 0     # Contador de refrescos
+    $script:PobGraceTicks = 3     # Ciclos que "sobrevive" en el panel sin confirmacion (con timer de 20s ~ 60s)
+    Function Crear-BotonFiltroPob($texto, $x, $filtro) {
+        $b = New-Object System.Windows.Forms.Button
+        $b.Text = $texto
+        $b.Location = New-Object System.Drawing.Point($x, 575)
+        $b.Size = New-Object System.Drawing.Size(88, 22)
+        $b.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 52)
+        $b.ForeColor = [System.Drawing.Color]::White
+        $b.FlatStyle = 'Flat'
+        $b.FlatAppearance.BorderSize = 1
+        $b.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(70, 70, 80)
+        $b.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+        $b.Cursor = [System.Windows.Forms.Cursors]::Hand
+        $b.Tag = $filtro
+        $b.Add_Click({
+            $script:PobFiltro = [string]$this.Tag
+            try { Actualizar-PoblacionReino } catch {}
+        })
+        $form.Controls.Add($b)
+        return $b
+    }
+    $script:BtnPobAll = Crear-BotonFiltroPob "Todos" ($OX + 280) "all"
+    $script:BtnPobPlayers = Crear-BotonFiltroPob "Jugadores" ($OX + 372) "players"
+    $script:BtnPobBots = Crear-BotonFiltroPob "Bots" ($OX + 464) "bots"
+
+    $lvPob = New-Object System.Windows.Forms.ListView
+    $lvPob.Location = New-Object System.Drawing.Point(($OX + 10), 338)
+    $lvPob.Size = New-Object System.Drawing.Size(540, 232)
+    $lvPob.View = "Details"
+    $lvPob.FullRowSelect = $true
+    $lvPob.GridLines = $false
+    $lvPob.MultiSelect = $false
+    $lvPob.BackColor = [System.Drawing.Color]::FromArgb(28, 28, 34)
+    $lvPob.ForeColor = [System.Drawing.Color]::White
+    $lvPob.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lvPob.HeaderStyle = "Nonclickable"
+    [void]$lvPob.Columns.Add("Nombre", 120)
+    [void]$lvPob.Columns.Add("Nivel", 40)
+    [void]$lvPob.Columns.Add("Clase", 85)
+    [void]$lvPob.Columns.Add("Raza", 85)
+    [void]$lvPob.Columns.Add("Faccion", 70)
+    [void]$lvPob.Columns.Add("Tipo", 55)
+    $lvPob.SmallImageList = New-Object System.Windows.Forms.ImageList
+    $lvPob.SmallImageList.ImageSize = New-Object System.Drawing.Size(16, 16)
+    $lvPob.SmallImageList.ColorDepth = "Depth32Bit"
+    # Iconos faccion (cache ui)
+    try {
+        $imgA = Obtener-IconoPanel "inv_bannerpvp_02" 16
+        $imgH = Obtener-IconoPanel "inv_bannerpvp_01" 16
+        if (-not $imgA) { $imgA = Obtener-IconoPanel "achievement_pvp_a_14" 16 }
+        if (-not $imgH) { $imgH = Obtener-IconoPanel "achievement_pvp_h_14" 16 }
+        if ($imgA) { [void]$lvPob.SmallImageList.Images.Add("alliance", $imgA) } else {
+            $bmp = New-Object System.Drawing.Bitmap 16, 16
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.Clear([System.Drawing.Color]::FromArgb(40, 80, 180))
+            $g.Dispose()
+            [void]$lvPob.SmallImageList.Images.Add("alliance", $bmp)
+        }
+        if ($imgH) { [void]$lvPob.SmallImageList.Images.Add("horde", $imgH) } else {
+            $bmp = New-Object System.Drawing.Bitmap 16, 16
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.Clear([System.Drawing.Color]::FromArgb(160, 30, 30))
+            $g.Dispose()
+            [void]$lvPob.SmallImageList.Images.Add("horde", $bmp)
+        }
+    } catch {}
+    $form.Controls.Add($lvPob)
+
+    $lblPobHint = New-Object System.Windows.Forms.Label
+    $lblPobHint.Text = "Doble clic = Armeria"
+    $lblPobHint.Location = New-Object System.Drawing.Point(($OX + 10), 575)
+    $lblPobHint.Size = New-Object System.Drawing.Size(160, 18)
+    $lblPobHint.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $lblPobHint.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 150)
+    $form.Controls.Add($lblPobHint)
+
+    $script:PobRazas = @{
+        1="Humano"; 2="Orco"; 3="Enano"; 4="Elfo Noche"; 5="No-Muerto"
+        6="Tauren"; 7="Gnomo"; 8="Trol"; 10="Elfo Sangre"; 11="Draenei"
+    }
+    $script:PobClases = @{
+        1="Guerrero"; 2="Paladin"; 3="Cazador"; 4="Picaro"; 5="Sacerdote"
+        6="DK"; 7="Chaman"; 8="Mago"; 9="Brujo"; 11="Druida"
+    }
+    # Razas Alianza: 1,3,4,7,11 — Horda: 2,5,6,8,10
+    $script:PobRazasAlianza = @(1, 3, 4, 7, 11)
+
+
+    Function Consulta-PanelMysql([string]$sql, [string]$bd) {
+        try {
+            if (-not $Global:MysqlDir) { return @() }
+            $exe = Join-Path $Global:MysqlDir "mysql.exe"
+            if (-not (Test-Path $exe)) { return @() }
+            if (-not (Get-Process -Name "mysqld" -ErrorAction SilentlyContinue)) { return @() }
+            $env:MYSQL_PWD = $Global:MysqlPass
+            $filas = & $exe "-u$($Global:MysqlUser)" -N -B -e $sql $bd 2>$null
+            $env:MYSQL_PWD = ""
+            $out = @()
+            foreach ($f in @($filas)) {
+                if ($null -eq $f) { continue }
+                $t = ("$f").TrimEnd("`r")
+                if ($t -and $t -notmatch '^(mysql:|Warning|ERROR)') { $out += $t }
+            }
+            return $out
+        } catch {
+            try { $env:MYSQL_PWD = "" } catch {}
+            return @()
+        }
+    }
+
+    Function Actualizar-PoblacionReino {
+        try {
+            # Si MySQL no esta corriendo (servidor apagado/reiniciado), no hay nada
+            # realmente online: vaciamos la cache para no dejar "fantasmas".
+            if (-not (Get-Process -Name "mysqld" -ErrorAction SilentlyContinue)) {
+                $script:PobCache = @{}
+                $lvPob.Items.Clear()
+                $lblPobCount.Text = (Obtener-Texto "LblOnlineOff" "Online: -- (MySQL off)")
+                return
+            }
+
+            $bdChar = if ($Global:CharDbName) { $Global:CharDbName } else { "acore_characters" }
+            $bdAuth = if ($Global:AuthDbName) { $Global:AuthDbName } else { "acore_auth" }
+            $botPrefix = "rndbot"
+            try {
+                if ($Global:PlayerbotAccountPrefix) { $botPrefix = [string]$Global:PlayerbotAccountPrefix }
+            } catch {}
+            $botPrefix = $botPrefix.ToLower()
+
+            # Query join auth: bot si username empieza por rndbot
+            # Partes en comillas simples para no romper `class` en PowerShell
+            $sql = 'SELECT c.name, c.level, c.race, c.`class`, LOWER(IFNULL(a.username,'''')) FROM `' + $bdChar + '`.characters c LEFT JOIN `' + $bdAuth + '`.account a ON a.id = c.account WHERE c.online = 1 ORDER BY c.name ASC LIMIT 2000;'
+
+            $filas = @(Consulta-PanelMysql $sql $bdChar)
+            $script:PobTick++
+
+            # --- Paso 1: actualizar/insertar en la cache todo lo que el SQL confirma online ahora ---
+            foreach ($ln in $filas) {
+                if (-not $ln) { continue }
+                $p = ("$ln") -split "`t"
+                if ($p.Count -lt 2) { continue }
+                $nombre = $p[0].Trim()
+                if (-not $nombre) { continue }
+                $nivel = if ($p.Count -ge 2) { $p[1].Trim() } else { "?" }
+                $razaId = 0; $claseId = 0
+                if ($p.Count -ge 3) { try { $razaId = [int](($p[2]).Trim()) } catch { $razaId = 0 } }
+                if ($p.Count -ge 4) { try { $claseId = [int](($p[3]).Trim()) } catch { $claseId = 0 } }
+                $userAcc = ""
+                if ($p.Count -ge 5) { $userAcc = $p[4].Trim().ToLower() }
+
+                $esBot = $false
+                if ($userAcc -and $userAcc.StartsWith($botPrefix)) { $esBot = $true }
+
+                $esAlianza = $script:PobRazasAlianza -contains $razaId
+
+                $script:PobCache[$nombre] = [PSCustomObject]@{
+                    Nombre     = $nombre
+                    Nivel      = $nivel
+                    RazaId     = $razaId
+                    ClaseId    = $claseId
+                    EsBot      = $esBot
+                    EsAlianza  = $esAlianza
+                    LastTick   = $script:PobTick
+                    Confirmado = $true   # visto en ESTE refresco
+                }
+            }
+
+            # --- Paso 2: purgar de la cache lo que lleva demasiados ciclos sin confirmarse ---
+            $clavesAEliminar = @()
+            foreach ($k in $script:PobCache.Keys) {
+                $entrada = $script:PobCache[$k]
+                if (($script:PobTick - $entrada.LastTick) -gt $script:PobGraceTicks) {
+                    $clavesAEliminar += $k
+                }
+            }
+            foreach ($k in $clavesAEliminar) { $script:PobCache.Remove($k) }
+
+            # --- Paso 3: marcar como "no confirmado este ciclo" lo que sobrevive solo por la cache ---
+            foreach ($k in $script:PobCache.Keys) {
+                $script:PobCache[$k].Confirmado = ($script:PobCache[$k].LastTick -eq $script:PobTick)
+            }
+
+            # --- Paso 4: pintar la lista a partir de la cache (ya sin solapes) ---
+            $lvPob.BeginUpdate()
+            $lvPob.Items.Clear()
+            $n = 0
+            $nBots = 0
+            $nPlayers = 0
+            $filtro = "all"
+            try { if ($script:PobFiltro) { $filtro = [string]$script:PobFiltro } } catch {}
+
+            foreach ($entrada in ($script:PobCache.Values | Sort-Object Nombre)) {
+                $esBot = $entrada.EsBot
+                if ($esBot) { $nBots++ } else { $nPlayers++ }
+
+                # Filtro de lista
+                if ($filtro -eq "bots" -and -not $esBot) { continue }
+                if ($filtro -eq "players" -and $esBot) { continue }
+
+                $razaId = $entrada.RazaId
+                $claseId = $entrada.ClaseId
+                $raza = "$razaId"
+                if ($script:PobRazas -and $script:PobRazas.ContainsKey([int]$razaId)) { $raza = [string]$script:PobRazas[[int]$razaId] }
+                elseif ($script:PobRazas -and $script:PobRazas.ContainsKey("$razaId")) { $raza = [string]$script:PobRazas["$razaId"] }
+                $clase = "$claseId"
+                if ($script:PobClases -and $script:PobClases.ContainsKey([int]$claseId)) { $clase = [string]$script:PobClases[[int]$claseId] }
+                elseif ($script:PobClases -and $script:PobClases.ContainsKey("$claseId")) { $clase = [string]$script:PobClases["$claseId"] }
+                $esAlianza = $entrada.EsAlianza
+                $faccion = if ($esAlianza) { (Obtener-Texto "LblAlianza" "Alianza") } else { (Obtener-Texto "LblHorda" "Horda") }
+                $tipo = if ($esBot) { (Obtener-Texto "LblTipoBot" "Bot") } else { (Obtener-Texto "LblTipoJugador" "Jugador") }
+                if (-not $entrada.Confirmado) { $tipo += " *" }  # * = sostenido por cache, no confirmado en este ciclo
+
+                $lvi = New-Object System.Windows.Forms.ListViewItem($entrada.Nombre)
+                [void]$lvi.SubItems.Add($entrada.Nivel)
+                [void]$lvi.SubItems.Add($clase)
+                [void]$lvi.SubItems.Add($raza)
+                [void]$lvi.SubItems.Add($faccion)
+                [void]$lvi.SubItems.Add($tipo)
+                $lvi.Tag = $entrada.Nombre
+                try {
+                    if ($lvPob.SmallImageList -and $lvPob.SmallImageList.Images.Count -ge 2) {
+                        $lvi.ImageIndex = if ($esAlianza) { 0 } else { 1 }
+                    }
+                } catch {}
+                if ($esBot) {
+                    $lvi.ForeColor = [System.Drawing.Color]::FromArgb(180, 180, 120)
+                } elseif ($esAlianza) {
+                    $lvi.ForeColor = [System.Drawing.Color]::FromArgb(120, 170, 255)
+                } else {
+                    $lvi.ForeColor = [System.Drawing.Color]::FromArgb(255, 120, 100)
+                }
+                if (-not $entrada.Confirmado) {
+                    # Atenuado: esta fila se mantiene gracias a la cache, no confirmada en el ultimo refresco
+                    $c = $lvi.ForeColor
+                    $lvi.ForeColor = [System.Drawing.Color]::FromArgb(150, [int]($c.R * 0.65), [int]($c.G * 0.65), [int]($c.B * 0.65))
+                }
+                [void]$lvPob.Items.Add($lvi)
+                $n++
+            }
+
+            $total = $nBots + $nPlayers
+            $fmt = Obtener-Texto "LblOnlineFmt" "Online: {0}  |  Jugadores: {1}  |  Bots: {2}"
+            $lblPobCount.Text = [string]::Format($fmt, $total, $nPlayers, $nBots)
+
+            # Resaltar filtro activo
+            try {
+                foreach ($bf in @($script:BtnPobAll, $script:BtnPobPlayers, $script:BtnPobBots)) {
+                    if (-not $bf) { continue }
+                    if ([string]$bf.Tag -eq $filtro) {
+                        $bf.BackColor = [System.Drawing.Color]::FromArgb(70, 100, 160)
+                    } else {
+                        $bf.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 52)
+                    }
+                }
+            } catch {}
+        } catch {
+            $lblPobCount.Text = (Obtener-Texto "LblOnlineError" "Online: error")
+        } finally {
+            try { $lvPob.EndUpdate() } catch {}
+        }
+    }
+
+    $btnPobRefresh.Add_Click({ Actualizar-PoblacionReino })
+
+    $lvPob.Add_DoubleClick({
+        try {
+            if ($lvPob.SelectedItems.Count -lt 1) { return }
+            $nom = [string]$lvPob.SelectedItems[0].Tag
+            if (-not $nom) { $nom = $lvPob.SelectedItems[0].Text }
+            if (-not $nom) { return }
+            if (Get-Command Abrir-PanelArmeria -ErrorAction SilentlyContinue) {
+                $Global:ArmeriaAutoBuscar = $nom
+                Abrir-PanelArmeria $form $nom
+            } else {
+                [System.Windows.Forms.MessageBox]::Show("Armeria no cargada.", "Armeria", 'OK', 'Warning')
+            }
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Error abriendo Armeria:`n$($_.Exception.Message)", "Armeria", 'OK', 'Error')
+        }
+    })
+
+    # Timer cada 20s (bajo consumo)
+    $timerPob = New-Object System.Windows.Forms.Timer
+    $timerPob.Interval = 20000
+    $timerPob.Add_Tick({ try { Actualizar-PoblacionReino } catch {} })
+    $timerPob.Start()
+    # Primera carga diferida 2s (deja arrancar MySQL)
+    $timerPobOnce = New-Object System.Windows.Forms.Timer
+    $timerPobOnce.Interval = 2000
+    $timerPobOnce.Add_Tick({
+        $timerPobOnce.Stop()
+        $timerPobOnce.Dispose()
+        try { Actualizar-PoblacionReino } catch {}
+    })
+    $timerPobOnce.Start()
+
+    # Stubs para no romper Actualizar-Textos-Interfaz (botones movidos al lateral)
+    $btnConfig = $script:BtnLatConfig
+    $btnCuentas = $script:BtnLatCuentas
+    $btnPersonajes = $script:BtnLatPers
+    $btnDescargarHD = $script:BtnLatDesc
+    $btnNPCBots = $script:BtnLatBots
+    $btnMods = $script:BtnLatMods
+    $btnArmeria = $script:BtnLatPers
+    $btnInyectarSQL = $script:BtnLatBots
+    $btnCredencialesMysql = $script:BtnLatConfig
+
     Function Actualizar-Textos-Interfaz {
+        try { Actualizar-EstiloBotonesIdioma } catch {}
         $lblTitulo.Text      = Obtener-Texto "Titulo" "PANEL DE CONTROL DEL SERVIDOR"
         $btnStartMysql.Text  = Obtener-Texto "BtnIniciar" "Iniciar"
         $btnStartAuth.Text   = $btnStartMysql.Text
@@ -620,21 +1324,48 @@ try {
         $btnStartWow.Text    = Obtener-Texto "BtnWow" "Iniciar Juego"
         $btnStartAll.Text    = Obtener-Texto "BtnStartAll" "INICIAR TODO"
         $btnStopAll.Text     = Obtener-Texto "BtnStopAll" "APAGAR TODO"
-        $btnConfig.Text      = Obtener-Texto "BtnConfig" "Cambiar Rutas"
-        $btnCuentas.Text     = Obtener-Texto "BtnCuentas" "Cuentas y Rangos"
-        $btnPersonajes.Text  = Obtener-Texto "BtnPersonajes" "Personajes (Pdump)"
-        $btnDescargarHD.Text = Obtener-Texto "BtnDescargarHD" "Descargar Cliente HD y Servidor"
-        $btnNPCBots.Text     = Obtener-Texto "BtnNPCBots" "Generador de NPCBots"
-        $btnInyectarSQL.Text = Obtener-Texto "BtnInyectarSqlPrincipal" "Inyectar SQL"
-        $btnCredencialesMysql.Text = Obtener-Texto "BtnCredencialesMysql" "Credenciales de MySQL (usuario / contrasena)"
-        $btnMods.Text = Obtener-Texto "BtnMods" "Mods"
-        $btnArmeria.Text = Obtener-Texto "BtnArmeria" "Armeria de Personajes"
         $btnRates.Text       = Obtener-Texto "BtnRates" "Configurar Rates"
         $lblStatus.Text      = Obtener-Texto "StatusWait" "Esperando acciones..."
         $lblUptimeTitulo.Text = Obtener-Texto "LblUptime" "Tiempo en linea"
+        try {
+            if ($script:BtnLatConfig)  { $script:BtnLatConfig.Text  = "  " + (Obtener-Texto "BtnConfig" "Rutas / Config") }
+            if ($script:BtnLatCuentas) { $script:BtnLatCuentas.Text = "  " + (Obtener-Texto "BtnCuentas" "Cuentas") }
+            if ($script:BtnLatArmeria) { $script:BtnLatArmeria.Text = "  " + (Obtener-Texto "BtnArmeria" "Armeria") }
+            if ($script:BtnLatPers)    { $script:BtnLatPers.Text    = "  " + (Obtener-Texto "BtnPersonajes" "Personajes") }
+            if ($script:BtnLatDesc)    { $script:BtnLatDesc.Text    = "  " + (Obtener-Texto "BtnDescargarHD" "Descargas") }
+            if ($script:BtnLatBots)    { $script:BtnLatBots.Text    = "  NPCBots" }
+            if ($script:BtnLatMods)    { $script:BtnLatMods.Text    = "  " + (Obtener-Texto "BtnMods" "Mods") }
+            if ($script:BtnLatReino)   { $script:BtnLatReino.Text   = "  " + (Obtener-Texto "BtnReino" "Reino") }
+            if ($lblPobTitulo) { $lblPobTitulo.Text = Obtener-Texto "LblPoblacion" "Poblacion del reino" }
+            if ($btnPobRefresh) { $btnPobRefresh.Text = Obtener-Texto "BtnActualizarPob" "Actualizar" }
+            if ($lblPobHint) { $lblPobHint.Text = Obtener-Texto "HintPoblacionArmeria" "Doble clic = abrir Armeria" }
+            if ($script:BtnPobAll) { $script:BtnPobAll.Text = Obtener-Texto "BtnFiltroTodos" "Todos" }
+            if ($script:BtnPobPlayers) { $script:BtnPobPlayers.Text = Obtener-Texto "BtnFiltroJugadores" "Jugadores" }
+            if ($script:BtnPobBots) { $script:BtnPobBots.Text = Obtener-Texto "BtnFiltroBots" "Bots" }
+            if ($lvPob -and $lvPob.Columns.Count -ge 6) {
+                $lvPob.Columns[0].Text = Obtener-Texto "ColPobNombre" "Nombre"
+                $lvPob.Columns[1].Text = Obtener-Texto "ColPobNivel" "Nivel"
+                $lvPob.Columns[2].Text = Obtener-Texto "ColPobClase" "Clase"
+                $lvPob.Columns[3].Text = Obtener-Texto "ColPobRaza" "Raza"
+                $lvPob.Columns[4].Text = Obtener-Texto "ColPobFaccion" "Faccion"
+                $lvPob.Columns[5].Text = Obtener-Texto "ColPobTipo" "Tipo"
+            }
+            try { Actualizar-PoblacionReino } catch {}
+        } catch {}
     }
 
     Actualizar-Textos-Interfaz
+
+    # Comprobar actualizacion unos segundos despues de abrir el panel
+    # (no bloquea el arranque; si no hay red, no dice nada)
+    $timerUpdate = New-Object System.Windows.Forms.Timer
+    $timerUpdate.Interval = 2500
+    $timerUpdate.Add_Tick({
+        $timerUpdate.Stop()
+        $timerUpdate.Dispose()
+        try { Comprobar-ActualizacionPanel } catch {}
+    })
+    $timerUpdate.Start()
 
     # ==========================================
     # LOGICA DE ACTUALIZACION Y PROCESOS

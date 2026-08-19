@@ -613,7 +613,7 @@ $Global:ArmeriaTalentTabIconos = @{
     161="ability_rogue_eviscerate"; 164="ability_warrior_innerrage"; 163="ability_warrior_defensivestance"
     182="ability_rogue_eviscerate"; 181="ability_backstab"; 183="ability_stealth"
     201="spell_holy_wordfortitude"; 202="spell_holy_holybolt"; 203="spell_shadow_shadowwordpain"
-    261="spell_nature_lightning"; 263="spell_nature_lightningshield"; 262="spell_nature_magicimmunity"
+    261="spell_nature_lightning"; 263="ability_shaman_stormstrike"; 262="spell_nature_magicimmunity"
     283="spell_nature_starfall"; 281="ability_racial_bearform"; 282="spell_nature_healingtouch"
     302="spell_shadow_deathcoil"; 303="spell_shadow_metamorphosis"; 301="spell_shadow_rainoffire"
     361="ability_hunter_beasttaming"; 363="ability_marksmanship"; 362="ability_hunter_swiftstrike"
@@ -692,44 +692,101 @@ Function Descargar-FondoPvP($ancho, $alto) {
 }
 
 Function Obtener-EspecializacionPersonaje($guidChar, $claseId) {
+    # Devuelve "Nombre|TabId|Fuente|Distribucion"
+    # Fuente: talentos-sesion | talentos-disco | calculo
     try {
-        $claseIdInt = [int]$claseId
-        if (-not $Global:ArmeriaTalentTabsPorClase.ContainsKey($claseIdInt)) { return $null }
-        $tabsClase = $Global:ArmeriaTalentTabsPorClase[$claseIdInt]
-        if (-not $tabsClase -or $tabsClase.Count -eq 0) { return $null }
-        $activeSpec = 0
-        try { $rSpec = (Consulta-Armeria "SELECT IFNULL(activeTalentGroup,0) FROM characters WHERE guid=$guidChar;" "acore_characters")[0]; if ($rSpec) { $activeSpec = [int]$rSpec.Trim() } } catch {}
-        $spellSet = @{}
+        $g = [string]$guidChar
+
+        # A) Calculo en vivo (siempre)
+        $calcNombre = $null; $calcTab = 0; $calcDist = ""
         try {
-            foreach ($linea in @(Consulta-Armeria "SELECT CONCAT(spell,'|',specMask) FROM character_talent WHERE guid=$guidChar;" "acore_characters")) {
-                $pt = $linea -split "\|"; if ($pt.Count -lt 2) { continue }
-                $sp = 0; $mask = 0; try { $sp = [int]$pt[0].Trim(); $mask = [int]$pt[1].Trim() } catch { continue }
-                if ($sp -le 0) { continue }
-                $bit = if ($activeSpec -eq 1) { 2 } else { 1 }
-                if (($mask -band $bit) -ne 0) { $spellSet[$sp] = $true }
+            $info = Armeria-ObtenerPrimarySpecInfo $guidChar $claseId
+            if ($info -and $info.TabId) {
+                $calcNombre = [string]$info.Nombre
+                $calcTab = [int]$info.TabId
+                try { $calcDist = [string]$info.Distribucion } catch { $calcDist = "" }
             }
         } catch {}
-        if ($spellSet.Count -eq 0) { return $null }
-        $datosTal = Obtener-DatosTalentosLocal
-        if (-not $datosTal -or -not $datosTal.Tabs) { return $null }
-        $bestTab = $null; $bestPts = -1
-        foreach ($tabId in @($tabsClase)) {
-            $pts = 0; $tid = [int]$tabId
-            if (-not $datosTal.Tabs.ContainsKey($tid)) { continue }
-            $listaTal = $datosTal.Tabs[$tid]; if (-not $listaTal) { continue }
-            foreach ($tal in @($listaTal)) {
-                if (-not $tal) { continue }
-                $ranksArr = @($tal.Ranks); $best = 0
-                for ($r = 0; $r -lt $ranksArr.Count; $r++) { try { $sid = [int]$ranksArr[$r]; if ($spellSet.ContainsKey($sid)) { $best = $r + 1 } } catch {} }
-                $pts += $best
-            }
-            if ($pts -gt $bestPts) { $bestPts = $pts; $bestTab = $tid }
+
+        # B) Cache de la ventana Talentos (sesion)
+        $sesNombre = $null; $sesTab = 0
+        if ($script:ArmeriaSpecDetectada -and [string]$script:ArmeriaSpecDetectada.Guid -eq $g) {
+            try {
+                $sesNombre = [string]$script:ArmeriaSpecDetectada.Nombre
+                $sesTab = [int]$script:ArmeriaSpecDetectada.TabId
+            } catch {}
         }
-        if ($bestPts -le 0 -or $null -eq $bestTab) { return $null }
-        if ($Global:ArmeriaTalentTabNombres.ContainsKey($bestTab)) { return $Global:ArmeriaTalentTabNombres[$bestTab] }
-        return "Rama $bestTab"
-    } catch { return $null }
+
+        # C) Cache en disco
+        $diskNombre = $null; $diskTab = 0
+        try {
+            if ($Global:RootDir) {
+                $dirC = Join-Path $Global:RootDir "Armeria\Cache"
+                $fc = Join-Path $dirC ("spec_{0}.txt" -f $g)
+                if (Test-Path -LiteralPath $fc) {
+                    $raw = (Get-Content -LiteralPath $fc -Raw -ErrorAction SilentlyContinue)
+                    if ($raw) {
+                        $raw = $raw.Trim()
+                        if ($raw.Contains("|")) {
+                            $pp = $raw -split "\|"
+                            $diskNombre = $pp[0].Trim()
+                            try { $diskTab = [int]$pp[1].Trim() } catch { $diskTab = 0 }
+                        }
+                    }
+                }
+            }
+        } catch {}
+
+        # Prioridad: sesion talentos > disco (escrito por ventana Talentos) > calculo
+        $nombre = $null; $tabId = 0; $fuente = "ninguno"
+        if ($sesTab -gt 0 -and $sesNombre) {
+            $nombre = $sesNombre; $tabId = $sesTab; $fuente = "talentos-sesion"
+        } elseif ($diskTab -gt 0 -and $diskNombre) {
+            $nombre = $diskNombre; $tabId = $diskTab; $fuente = "talentos-disco"
+        } elseif ($calcTab -gt 0 -and $calcNombre) {
+            $nombre = $calcNombre; $tabId = $calcTab; $fuente = "calculo"
+        }
+
+        # Si hay calculo y no hay cache de talentos, persistir calculo para depurar
+        try {
+            if ($Global:RootDir -and $calcTab -gt 0) {
+                $dirC = Join-Path $Global:RootDir "Armeria\Cache"
+                if (-not (Test-Path $dirC)) { New-Item -ItemType Directory -Path $dirC -Force -ErrorAction SilentlyContinue | Out-Null }
+                $fc = Join-Path $dirC ("spec_{0}.txt" -f $g)
+                # Solo escribir si no hay cache de talentos, o actualizar linea de debug
+                $fcDbg = Join-Path $dirC ("spec_{0}.debug.txt" -f $g)
+                $dbg = @(
+                    "guid=$g"
+                    "calc=$calcNombre|$calcTab dist=$calcDist"
+                    "sesion=$sesNombre|$sesTab"
+                    "disco=$diskNombre|$diskTab"
+                    "elegido=$nombre|$tabId fuente=$fuente"
+                ) -join "`r`n"
+                Set-Content -LiteralPath $fcDbg -Value $dbg -Encoding UTF8
+                # NUNCA pisar una cache de talentos con un calculo debil
+                $puedeEscribir = $false
+                if ($fuente -eq "talentos-sesion") { $puedeEscribir = $true }
+                elseif ($fuente -eq "calculo") {
+                    $tot = 0
+                    try { if ($info -and $info.Total) { $tot = [int]$info.Total } } catch {}
+                    if ($tot -ge 20) { $puedeEscribir = $true }
+                    # Si no hay disco previo, si escribir para no dejar vacio
+                    if (-not $diskTab -or $diskTab -le 0) { $puedeEscribir = $true }
+                }
+                if ($puedeEscribir -and $nombre -and $tabId -gt 0) {
+                    Set-Content -LiteralPath $fc -Value ("{0}|{1}" -f $nombre, $tabId) -Encoding UTF8
+                }
+            }
+        } catch {}
+
+        if (-not $nombre -or $tabId -le 0) { return $null }
+        if (-not $calcDist) { $calcDist = "-" }
+        return ("{0}|{1}|{2}|{3}" -f $nombre, $tabId, $fuente, $calcDist)
+    } catch {
+        return $null
+    }
 }
+
 
 Function Obtener-DatosTalentosLocal {
     if ($Global:ArmeriaTalentosData) { return $Global:ArmeriaTalentosData }
@@ -852,8 +909,10 @@ Function Descargar-IconoPorNombre($nombreIcono, $tamanio, $cacheKey) {
         try { if ($tamanio -gt 0) { $sz = [int]$tamanio } } catch {}
         $cacheDir = Join-Path $Global:RootDir "Armeria\Imagenes\spells"
         if (-not (Test-Path $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force -ErrorAction SilentlyContinue | Out-Null }
-        $key = if ($cacheKey) { "$cacheKey" } else { $nom }
-        $cacheFile = Join-Path $cacheDir ("glyph_{0}.jpg" -f $key)
+        # Incluir nombre de icono en la clave para que un cambio de icono no reutilice cache vieja
+        $key = if ($cacheKey) { "{0}_{1}" -f $cacheKey, $nom } else { $nom }
+        $cacheFile = Join-Path $cacheDir ("icon_{0}.jpg" -f ($key -replace '[^\w\-]', '_'))
+
         if (Test-Path -LiteralPath $cacheFile) {
             try {
                 $bytes = [System.IO.File]::ReadAllBytes($cacheFile)
@@ -904,6 +963,274 @@ Function Obtener-NombreSpellTalento($spellId) {
     $Global:ArmeriaSpellNombreCache[$sid] = $nombre
     return $nombre
 }
+
+
+# ==========================================
+# Ranking de talentos compartido (Armeria + ventana Talentos)
+# ==========================================
+Function global:Armeria-GetTalentRanksForSpec {
+    param($specIdx, $tabsList, $spellMap, $datos)
+    $spellSet = @{}
+    try {
+        if ($null -ne $spellMap -and $spellMap.ContainsKey([int]$specIdx)) {
+            $tmp = $spellMap[[int]$specIdx]
+            if ($null -ne $tmp) { $spellSet = $tmp }
+        }
+    } catch { $spellSet = @{} }
+    $ranksByTalent = @{}
+    $pointsByTab = @{}
+    if ($null -eq $datos -or $null -eq $datos.Tabs) {
+        return [PSCustomObject]@{ Ranks = $ranksByTalent; Points = $pointsByTab }
+    }
+    foreach ($tabId in @($tabsList)) {
+        $tid = 0
+        try { $tid = [int]$tabId } catch { continue }
+        $pointsByTab[$tid] = 0
+        $listaTal = $null
+        try { $listaTal = $datos.Tabs[$tid] } catch {}
+        if ($null -eq $listaTal) { try { $listaTal = $datos.Tabs["$tid"] } catch {} }
+        if ($null -eq $listaTal) { continue }
+        foreach ($tal in @($listaTal)) {
+            if ($null -eq $tal) { continue }
+            $best = 0
+            $ranksArr = @()
+            try { $ranksArr = @($tal.Ranks) } catch { continue }
+            for ($r = 0; $r -lt $ranksArr.Count; $r++) {
+                try {
+                    $sid = [int]$ranksArr[$r]
+                    if ($sid -gt 0 -and $spellSet.ContainsKey($sid)) { $best = $r + 1 }
+                } catch {}
+            }
+            try {
+                $ranksByTalent[[int]$tal.Id] = $best
+                $pointsByTab[$tid] = [int]$pointsByTab[$tid] + $best
+            } catch {}
+        }
+    }
+    return [PSCustomObject]@{ Ranks = $ranksByTalent; Points = $pointsByTab }
+}
+
+
+# Hechizos firma por especializacion (fallback si character_talent no matchea bien los ranks)
+# Shaman: el calculo por ranks a veces solo ve 5 pts Elemental aunque el personaje sea Mejora.
+$Global:ArmeriaSpecHechizosFirma = @{
+    # classId = @{ tabId = @(spellIds) }
+    1 = @{ # Guerrero
+        161 = @(12294, 30330, 46924)      # Arms: Mortal Strike, etc.
+        164 = @(23881, 12292, 60970)      # Fury: Bloodthirst
+        163 = @(20243, 469, 50720)        # Protection: Devastate
+    }
+    2 = @{ # Paladin
+        382 = @(20473, 53563, 31821)      # Holy
+        383 = @(20925, 48952, 64205)      # Protection
+        381 = @(35395, 53385, 20066)      # Retribution: Crusader Strike, Divine Storm
+    }
+    3 = @{ # Hunter
+        361 = @(19574, 34026, 19577)      # BM
+        363 = @(19434, 53209, 19506)      # MM
+        362 = @(19306, 63672, 60097)      # Survival
+    }
+    4 = @{ # Rogue
+        182 = @(1329, 32645, 14183)       # Assassination
+        181 = @(13877, 51690, 13750)      # Combat
+        183 = @(16511, 14183, 36554)      # Subtlety (approx)
+    }
+    5 = @{ # Priest
+        201 = @(47540, 33206, 10060)      # Discipline
+        202 = @(34861, 47788, 48089)      # Holy
+        203 = @(15407, 34914, 47585)      # Shadow: Mind Flay, VT, Dispersion
+    }
+    6 = @{ # DK
+        398 = @(49998, 55050, 55262)      # Blood
+        399 = @(49143, 49184, 51271)      # Frost
+        400 = @(55090, 49206, 51052)      # Unholy
+    }
+    7 = @{ # Shaman
+        261 = @(51490, 51505, 16166, 30706, 16039, 16109, 16578, 16086, 29062)   # Elemental
+        263 = @(17364, 60103, 51533, 30823, 8232, 16259, 16295, 16252, 16254, 16256, 16261, 16268, 16043) # Enhancement
+        262 = @(974, 61295, 16188, 51886, 16182, 16226, 16176, 16187, 16190)     # Restoration
+    }
+    8 = @{ # Mage
+        81  = @(44425, 31589, 12043)      # Arcane
+        41  = @(11366, 11129, 44457)      # Fire
+        61  = @(31687, 11426, 44572)      # Frost
+    }
+    9 = @{ # Warlock
+        302 = @(30108, 48181, 59164)      # Affliction
+        303 = @(47241, 59672, 47193)      # Demonology
+        301 = @(17962, 50796, 47897)      # Destruction
+    }
+    11 = @{ # Druid
+        283 = @(48505, 24858, 33831)      # Balance
+        281 = @(33917, 50334, 52610)      # Feral
+        282 = @(48438, 18562, 17116)      # Resto
+    }
+}
+
+Function global:Armeria-DetectarSpecPorHechizos($guidChar, $claseId) {
+    try {
+        $cid = [int]$claseId
+        if (-not $Global:ArmeriaSpecHechizosFirma.ContainsKey($cid)) { return $null }
+        $mapa = $Global:ArmeriaSpecHechizosFirma[$cid]
+        $spellsKnown = @{}
+        try {
+            foreach ($linea in @(Consulta-Armeria "SELECT spell FROM character_spell WHERE guid=$guidChar AND disabled=0;" "acore_characters")) {
+                if (-not $linea) { continue }
+                $sp = 0
+                try { $sp = [int](("$linea").Trim()) } catch { continue }
+                if ($sp -gt 0) { $spellsKnown[$sp] = $true }
+            }
+        } catch {}
+        # Tambien talentos (por si no estan en character_spell)
+        try {
+            foreach ($linea in @(Consulta-Armeria "SELECT spell FROM character_talent WHERE guid=$guidChar;" "acore_characters")) {
+                if (-not $linea) { continue }
+                $pt = ("$linea").Trim() -split "\|"
+                $sp = 0
+                try { $sp = [int]$pt[0].Trim() } catch { continue }
+                if ($sp -gt 0) { $spellsKnown[$sp] = $true }
+            }
+        } catch {}
+        if ($spellsKnown.Count -eq 0) { return $null }
+
+        $bestTab = $null
+        $bestHits = -1
+        $detalle = @()
+        foreach ($tabId in @($mapa.Keys)) {
+            $hits = 0
+            $lista = @($mapa[$tabId])
+            foreach ($sid in $lista) {
+                try {
+                    if ($spellsKnown.ContainsKey([int]$sid)) { $hits++ }
+                } catch {}
+            }
+            $detalle += ("{0}:{1}" -f $tabId, $hits)
+            if ($hits -gt $bestHits) { $bestHits = $hits; $bestTab = [int]$tabId }
+        }
+        if ($null -eq $bestTab -or $bestHits -le 0) { return $null }
+        $nombre = "Rama $bestTab"
+        try {
+            if ($Global:ArmeriaTalentTabNombres.ContainsKey($bestTab)) {
+                $nombre = [string]$Global:ArmeriaTalentTabNombres[$bestTab]
+            }
+        } catch {}
+        return @{
+            Nombre = $nombre
+            TabId = $bestTab
+            Hits = $bestHits
+            Detalle = ($detalle -join ",")
+        }
+    } catch { return $null }
+}
+
+Function global:Armeria-ObtenerPrimarySpecInfo {
+    param($guidChar, $claseId)
+    # 1) Carga todos los spells de character_talent
+    # 2) Cuenta cuantos caen en el pool de ranks de cada rama (mas fiable que rank-a-rank)
+    # 3) Fallback hechizos firma si total bajo
+    try {
+        $claseIdInt = [int]$claseId
+        if (-not $Global:ArmeriaTalentTabsPorClase.ContainsKey($claseIdInt)) { return $null }
+        $tabsClase = @($Global:ArmeriaTalentTabsPorClase[$claseIdInt])
+        if ($tabsClase.Count -eq 0) { return $null }
+
+        $spellSetAll = @{}
+        try {
+            foreach ($linea in @(Consulta-Armeria "SELECT CONCAT(IFNULL(spell,0),'|',IFNULL(specMask,0)) FROM character_talent WHERE guid=$guidChar;" "acore_characters")) {
+                if (-not $linea) { continue }
+                $pt = ("$linea").Trim() -split "\|"
+                $sp = 0
+                try { $sp = [int]$pt[0].Trim() } catch { continue }
+                if ($sp -gt 0) { $spellSetAll[$sp] = $true }
+            }
+        } catch {}
+        if ($spellSetAll.Count -eq 0) { return $null }
+
+        $datosTal = Obtener-DatosTalentosLocal
+        if (-not $datosTal -or -not $datosTal.Tabs) { return $null }
+
+        $bestTab = $null
+        $bestPts = -1
+        $ptsList = @()
+        $totalPts = 0
+
+        foreach ($tabId in $tabsClase) {
+            $tid = [int]$tabId
+            $listaTal = $null
+            try { $listaTal = $datosTal.Tabs[$tid] } catch {}
+            if ($null -eq $listaTal) { try { $listaTal = $datosTal.Tabs["$tid"] } catch {} }
+
+            # Pool de todos los spellIds de ranks de esta rama
+            $pool = @{}
+            $ptsRank = 0
+            if ($listaTal) {
+                foreach ($tal in @($listaTal)) {
+                    if ($null -eq $tal) { continue }
+                    $ranksArr = @()
+                    try { $ranksArr = @($tal.Ranks) } catch { continue }
+                    $best = 0
+                    for ($r = 0; $r -lt $ranksArr.Count; $r++) {
+                        $sid = 0
+                        try { $sid = [int]$ranksArr[$r] } catch { continue }
+                        if ($sid -le 0) { continue }
+                        $pool[$sid] = $true
+                        if ($spellSetAll.ContainsKey($sid)) { $best = $r + 1 }
+                    }
+                    $ptsRank += $best
+                }
+            }
+            # Hits de membresia (mas tolerante)
+            $hits = 0
+            foreach ($sid in @($pool.Keys)) {
+                try { if ($spellSetAll.ContainsKey([int]$sid)) { $hits++ } } catch {}
+            }
+            # Usar el maximo entre puntos-por-rank y hits (hits/3 aprox como "puntos")
+            $score = $ptsRank
+            if ($hits -gt $score) { $score = $hits }
+
+            $ptsList += $score
+            $totalPts += $score
+            if ($score -gt $bestPts) { $bestPts = $score; $bestTab = $tid }
+        }
+
+        $firmaUsada = $false
+        if ($totalPts -lt 20) {
+            $firma = Armeria-DetectarSpecPorHechizos $guidChar $claseId
+            if ($firma -and $firma.TabId -and [int]$firma.Hits -gt 0) {
+                # Solo usar firma si gana con claridad
+                $bestTab = [int]$firma.TabId
+                $bestPts = [int]$firma.Hits
+                $ptsList = @("firma:$($firma.Detalle)")
+                $firmaUsada = $true
+                $totalPts = $bestPts
+            }
+        }
+
+        if ($null -eq $bestTab -or $bestPts -le 0) { return $null }
+
+        $nombre = "Rama $bestTab"
+        try {
+            if ($Global:ArmeriaTalentTabNombres.ContainsKey([int]$bestTab)) {
+                $nombre = [string]$Global:ArmeriaTalentTabNombres[[int]$bestTab]
+            }
+        } catch {}
+
+        $distTxt = ($ptsList -join " / ")
+        if ($firmaUsada) { $distTxt = "firma($distTxt)" }
+
+        return @{
+            Nombre = $nombre
+            TabId = [int]$bestTab
+            Pts = [int]$bestPts
+            Distribucion = $distTxt
+            Total = [int]$totalPts
+            TalentCount = [int]$spellSetAll.Count
+        }
+    } catch {
+        return $null
+    }
+}
+
 
 Function Mostrar-VentanaTalentos($guidChar, $nombreChar, $claseId, $formPadre) {
     $fBoldT   = New-Object System.Drawing.Font("Georgia", 10, [System.Drawing.FontStyle]::Bold)
@@ -1011,40 +1338,7 @@ Function Mostrar-VentanaTalentos($guidChar, $nombreChar, $claseId, $formPadre) {
     $script:TalentoSpecActual = $activeSpec
 
     Function Get-TalentRanksForSpecLocal($specIdx, $tabsList, $spellMap, $datos) {
-        $spellSet = @{}
-        try {
-            if ($null -ne $spellMap -and $spellMap.ContainsKey($specIdx)) {
-                $tmp = $spellMap[$specIdx]
-                if ($null -ne $tmp) { $spellSet = $tmp }
-            }
-        } catch { $spellSet = @{} }
-        $ranksByTalent = @{}
-        $pointsByTab = @{}
-        if ($null -eq $datos -or $null -eq $datos.Tabs) {
-            return [PSCustomObject]@{ Ranks = $ranksByTalent; Points = $pointsByTab }
-        }
-        foreach ($tabId in @($tabsList)) {
-            $pointsByTab[[int]$tabId] = 0
-            if (-not $datos.Tabs.ContainsKey([int]$tabId)) { continue }
-            $listaTal = $datos.Tabs[[int]$tabId]
-            if ($null -eq $listaTal) { continue }
-            foreach ($tal in @($listaTal)) {
-                if ($null -eq $tal) { continue }
-                $best = 0
-                $ranksArr = @($tal.Ranks)
-                for ($r = 0; $r -lt $ranksArr.Count; $r++) {
-                    try {
-                        $sid = [int]$ranksArr[$r]
-                        if ($spellSet.ContainsKey($sid)) { $best = $r + 1 }
-                    } catch {}
-                }
-                try {
-                    $ranksByTalent[[int]$tal.Id] = $best
-                    $pointsByTab[[int]$tabId] = [int]$pointsByTab[[int]$tabId] + $best
-                } catch {}
-            }
-        }
-        return [PSCustomObject]@{ Ranks = $ranksByTalent; Points = $pointsByTab }
+        return (Armeria-GetTalentRanksForSpec $specIdx $tabsList $spellMap $datos)
     }
 
     $null = Obtener-DatosGlifosLocal
@@ -1220,6 +1514,20 @@ Function Mostrar-VentanaTalentos($guidChar, $nombreChar, $claseId, $formPadre) {
         $lblDist.Text = "$($pts[0]) / $($pts[1]) / $($pts[2])"
         $primIdx = 0
         for ($i = 1; $i -lt 3; $i++) { if ($pts[$i] -gt $pts[$primIdx]) { $primIdx = $i } }
+        # Cache para la cabecera de la Armeria (misma deteccion)
+        try {
+            if (($pts[0]+$pts[1]+$pts[2]) -gt 0 -and $tabsClase -and $tabsClase.Count -gt $primIdx) {
+                $tabCache = [int]$tabsClase[$primIdx]
+                $nomCache = $nombres[$primIdx]
+                $script:ArmeriaSpecDetectada = @{ Guid = [string]$guidChar; Nombre = $nomCache; TabId = $tabCache }
+                if ($Global:RootDir) {
+                    $dirC = Join-Path $Global:RootDir "Armeria\Cache"
+                    if (-not (Test-Path $dirC)) { New-Item -ItemType Directory -Path $dirC -Force | Out-Null }
+                    $fc = Join-Path $dirC ("spec_{0}.txt" -f $guidChar)
+                    Set-Content -LiteralPath $fc -Value ("{0}|{1}" -f $nomCache, $tabCache) -Encoding UTF8
+                }
+            }
+        } catch {}
         if (($pts[0]+$pts[1]+$pts[2]) -gt 0) {
             $lblTituloTal.Text = "Talentos - $nombreChar  ·  $($nombres[$primIdx])"
             try {
@@ -2254,7 +2562,114 @@ Function Mostrar-VentanaPvP($guidChar, $nombreChar, $formPadre) {
     $pvpForm.ShowDialog($formPadre) | Out-Null
 }
 
-Function Abrir-PanelArmeria($formPadre) {
+
+# Iconos de botones de la Armeria (PvP, Talentos, etc.)
+# Personalizables: coloca PNG/JPG en Imagenes\armeria\ con nombres:
+#   pvp.png, talentos.png, reputaciones.png, logros.png, transmog.png, establos.png
+# Tambien acepta el nombre del icono Wowhead (ej. achievement_general.png)
+Function global:Armeria-ObtenerIconoAccion($clave, $tamanio) {
+    try {
+        $sz = 28
+        try { if ($tamanio -gt 0) { $sz = [int]$tamanio } } catch {}
+        $key = ([string]$clave).ToLower().Trim()
+        if (-not $key) { return $null }
+
+        $aliasWow = @{
+            "pvp"           = "achievement_bg_killxenemies_generalsroom"
+            "talentos"      = "ability_marksmanship"
+            "reputaciones"  = "achievement_reputation_01"
+            "logros"        = "achievement_general"
+            "transmog"      = "inv_chest_cloth_17"
+            "establos"      = "ability_mount_ridinghorse"
+        }
+        $wow = $key
+        if ($aliasWow.ContainsKey($key)) { $wow = $aliasWow[$key] }
+
+        $dirs = @()
+        if ($Global:ImgDir) {
+            $dirs += (Join-Path $Global:ImgDir "armeria")
+            $dirs += (Join-Path $Global:ImgDir "menu")
+        }
+        if ($Global:AppRoot) {
+            $dirs += (Join-Path $Global:AppRoot "Imagenes\armeria")
+            $dirs += (Join-Path $Global:AppRoot "Imagenes\menu")
+        }
+        if ($Global:RootDir) {
+            $dirs += (Join-Path $Global:RootDir "Armeria\Imagenes\armeria")
+            $dirs += (Join-Path (Split-Path -Parent $Global:RootDir) "Imagenes\armeria")
+            $dirs += (Join-Path (Split-Path -Parent $Global:RootDir) "Imagenes\menu")
+        }
+        $candidatos = @($key, ("armeria_" + $key), $wow) | Select-Object -Unique
+        $exts = @(".png", ".jpg", ".jpeg", ".bmp", ".gif")
+        foreach ($dir in $dirs) {
+            if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { continue }
+            foreach ($c in $candidatos) {
+                foreach ($ext in $exts) {
+                    $fp = Join-Path $dir ($c + $ext)
+                    if (Test-Path -LiteralPath $fp) {
+                        try {
+                            $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $fp).Path)
+                            $bmp = New-Object System.Drawing.Bitmap $sz, $sz
+                            $g = [System.Drawing.Graphics]::FromImage($bmp)
+                            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                            $g.DrawImage($img, 0, 0, $sz, $sz)
+                            $g.Dispose(); $img.Dispose()
+                            return $bmp
+                        } catch {}
+                    }
+                }
+            }
+        }
+
+        try {
+            if (Get-Command Descargar-IconoUI -ErrorAction SilentlyContinue) {
+                $ic = Descargar-IconoUI $wow $sz
+                if ($ic) { return $ic }
+            }
+        } catch {}
+        return $null
+    } catch { return $null }
+}
+
+Function global:Armeria-CrearBotonIcono($x, $y, $clave, $tooltipTxt, $colorBg, $tooltip, $szBtn = 48) {
+    try { $szBtn = [int]$szBtn } catch { $szBtn = 48 }
+    if ($szBtn -lt 28) { $szBtn = 28 }
+    $iconSz = [math]::Max(20, $szBtn - 8)
+    $btn = New-Object System.Windows.Forms.Button
+    $btn.Location = New-Object System.Drawing.Point($x, $y)
+    $btn.Size = New-Object System.Drawing.Size($szBtn, $szBtn)
+    $btn.FlatStyle = 'Flat'
+    $btn.FlatAppearance.BorderSize = 1
+    $btn.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
+    $btn.BackColor = $colorBg
+    $btn.ForeColor = [System.Drawing.Color]::White
+    $btn.Text = ""
+    $btn.Enabled = $false
+    $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $btn.ImageAlign = 'MiddleCenter'
+    $btn.TextAlign = 'MiddleCenter'
+    $btn.TextImageRelation = 'Overlay'
+    $btn.Padding = New-Object System.Windows.Forms.Padding(0)
+    try {
+        $ic = Armeria-ObtenerIconoAccion $clave $iconSz
+        if ($ic) {
+            $btn.Image = $ic
+            $btn.Text = ""
+        } else {
+            $btn.Text = ($clave.Substring(0,1).ToUpper())
+            $btn.Font = New-Object System.Drawing.Font("Georgia", 14, [System.Drawing.FontStyle]::Bold)
+        }
+    } catch {
+        try { $btn.Text = ($clave.Substring(0,1).ToUpper()) } catch { $btn.Text = "?" }
+    }
+    try {
+        if ($tooltip) { $tooltip.SetToolTip($btn, $tooltipTxt) }
+    } catch {}
+    return $btn
+}
+
+
+Function Abrir-PanelArmeria($formPadre, $nombreInicial = $null) {
     $SLOT_SIZE = 48
 
     $profNombres = @{
@@ -2295,25 +2710,25 @@ Function Abrir-PanelArmeria($formPadre) {
     $fTitle = New-Object System.Drawing.Font("Georgia", 20, [System.Drawing.FontStyle]::Bold)
     $sepVert2 = New-Object System.Windows.Forms.Panel
     $sepVert2.BackColor = [System.Drawing.Color]::FromArgb(60, 50, 40)
-    $sepVert2.Location = New-Object System.Drawing.Point(500, 131)
+    $sepVert2.Location = New-Object System.Drawing.Point(520, 150)
     $sepVert2.Size = New-Object System.Drawing.Size(1, 680)
     $armForm.Controls.Add($sepVert2)
     $lblStatsTitulo = New-Object System.Windows.Forms.Label
     $lblStatsTitulo.Text = "Estadisticas"
-    $lblStatsTitulo.Location = New-Object System.Drawing.Point(510, 131)
+    $lblStatsTitulo.Location = New-Object System.Drawing.Point(530, 150)
     $lblStatsTitulo.Size = New-Object System.Drawing.Size(230, 20)
     $lblStatsTitulo.Font = $fBold
     $lblStatsTitulo.ForeColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
     $armForm.Controls.Add($lblStatsTitulo)
     $panelStats = New-Object System.Windows.Forms.Panel
-    $panelStats.Location = New-Object System.Drawing.Point(510, 153)
+    $panelStats.Location = New-Object System.Drawing.Point(530, 175)
     $panelStats.Size = New-Object System.Drawing.Size(230, 650)
     $panelStats.BackColor = [System.Drawing.Color]::FromArgb(20, 18, 15)
-    $panelStats.AutoScroll = $true
+    $panelStats.AutoScroll = $false
     $armForm.Controls.Add($panelStats)
     $sepVert3 = New-Object System.Windows.Forms.Panel
     $sepVert3.BackColor = [System.Drawing.Color]::FromArgb(60, 50, 40)
-    $sepVert3.Location = New-Object System.Drawing.Point(745, 131)
+    $sepVert3.Location = New-Object System.Drawing.Point(790, 150)
     $sepVert3.Size = New-Object System.Drawing.Size(1, 680)
     $armForm.Controls.Add($sepVert3)
     $armForm.StartPosition = 'CenterParent'
@@ -2388,14 +2803,14 @@ Function Abrir-PanelArmeria($formPadre) {
     })
     $lblNombre = New-Object System.Windows.Forms.Label
     $lblNombre.Text = "Nombre del personaje:"
-    $lblNombre.Location = New-Object System.Drawing.Point(500, 12)
-    $lblNombre.Size = New-Object System.Drawing.Size(200, 18)
+    $lblNombre.Location = New-Object System.Drawing.Point(530, 12)
+    $lblNombre.Size = New-Object System.Drawing.Size(220, 18)
     $lblNombre.Font = $fNormal
     $armForm.Controls.Add($lblNombre)
 
     $txtNombre = New-Object System.Windows.Forms.TextBox
-    $txtNombre.Location = New-Object System.Drawing.Point(500, 32)
-    $txtNombre.Size = New-Object System.Drawing.Size(160, 22)
+    $txtNombre.Location = New-Object System.Drawing.Point(530, 32)
+    $txtNombre.Size = New-Object System.Drawing.Size(180, 22)
     $txtNombre.Font = $fNormal
     $txtNombre.BackColor = [System.Drawing.Color]::FromArgb(30, 25, 20)
     $txtNombre.ForeColor = [System.Drawing.Color]::White
@@ -2403,7 +2818,7 @@ Function Abrir-PanelArmeria($formPadre) {
 
     $btnBuscar = New-Object System.Windows.Forms.Button
     $btnBuscar.Text = "Buscar"
-    $btnBuscar.Location = New-Object System.Drawing.Point(668, 30)
+    $btnBuscar.Location = New-Object System.Drawing.Point(720, 30)
     $btnBuscar.Size = New-Object System.Drawing.Size(90, 26)
     $btnBuscar.BackColor = [System.Drawing.Color]::FromArgb(120, 20, 20)
     $btnBuscar.ForeColor = [System.Drawing.Color]::White
@@ -2415,8 +2830,8 @@ Function Abrir-PanelArmeria($formPadre) {
 
     $btnBorrarCache = New-Object System.Windows.Forms.Button
     $btnBorrarCache.Text = "Borrar Caché Jugador"
-    $btnBorrarCache.Location = New-Object System.Drawing.Point(500, 62)
-    $btnBorrarCache.Size = New-Object System.Drawing.Size(258, 26)
+    $btnBorrarCache.Location = New-Object System.Drawing.Point(530, 62)
+    $btnBorrarCache.Size = New-Object System.Drawing.Size(280, 26)
     $btnBorrarCache.BackColor = [System.Drawing.Color]::FromArgb(60, 20, 20)
     $btnBorrarCache.ForeColor = [System.Drawing.Color]::White
     $btnBorrarCache.FlatStyle = 'Flat'
@@ -2428,8 +2843,8 @@ Function Abrir-PanelArmeria($formPadre) {
 
     $lblAvisoCache = New-Object System.Windows.Forms.Label
     $lblAvisoCache.Text = "Si no ves las estadisticas de los item equipados, borra cache del jugador para actualizarlos"
-    $lblAvisoCache.Location = New-Object System.Drawing.Point(500, 91)
-    $lblAvisoCache.Size = New-Object System.Drawing.Size(242, 28)
+    $lblAvisoCache.Location = New-Object System.Drawing.Point(530, 91)
+    $lblAvisoCache.Size = New-Object System.Drawing.Size(280, 34)
     $lblAvisoCache.Font = New-Object System.Drawing.Font("Georgia", 6.5, [System.Drawing.FontStyle]::Italic)
     $lblAvisoCache.ForeColor = [System.Drawing.Color]::FromArgb(210, 180, 100)
     $armForm.Controls.Add($lblAvisoCache)
@@ -2484,18 +2899,25 @@ Function Abrir-PanelArmeria($formPadre) {
     $pbClase.SizeMode = 'StretchImage'
     $pbClase.BackColor = [System.Drawing.Color]::Transparent
     $armForm.Controls.Add($pbClase)
+    # Icono de especializacion (rama de talentos activa) junto a la clase
+    $pbSpec = New-Object System.Windows.Forms.PictureBox
+    $pbSpec.Location = New-Object System.Drawing.Point(109, 8)
+    $pbSpec.Size = New-Object System.Drawing.Size($ICON_BIG, $ICON_BIG)
+    $pbSpec.SizeMode = 'StretchImage'
+    $pbSpec.BackColor = [System.Drawing.Color]::Transparent
+    $armForm.Controls.Add($pbSpec)
     $lblNombreChar = New-Object System.Windows.Forms.Label
     $lblNombreChar.Text = "..."
-    $lblNombreChar.Location = New-Object System.Drawing.Point(110, 6)
-    $lblNombreChar.Size = New-Object System.Drawing.Size(375, 36)
+    $lblNombreChar.Location = New-Object System.Drawing.Point(158, 6)
+    $lblNombreChar.Size = New-Object System.Drawing.Size(327, 36)
     $lblNombreChar.Font = New-Object System.Drawing.Font("Georgia", 20, [System.Drawing.FontStyle]::Bold)
     $lblNombreChar.ForeColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
     $lblNombreChar.TextAlign = 'MiddleCenter'
     $armForm.Controls.Add($lblNombreChar)
     $lblFicha = New-Object System.Windows.Forms.Label
     $lblFicha.Text = ""
-    $lblFicha.Location = New-Object System.Drawing.Point(110, 42)
-    $lblFicha.Size = New-Object System.Drawing.Size(375, 18)
+    $lblFicha.Location = New-Object System.Drawing.Point(158, 42)
+    $lblFicha.Size = New-Object System.Drawing.Size(327, 18)
     $lblFicha.Font = New-Object System.Drawing.Font("Georgia", 9.5)
     $lblFicha.ForeColor = [System.Drawing.Color]::FromArgb(200, 190, 170)
     $lblFicha.TextAlign = 'MiddleCenter'
@@ -2503,8 +2925,8 @@ Function Abrir-PanelArmeria($formPadre) {
 
     $lblGuild = New-Object System.Windows.Forms.Label
     $lblGuild.Text = ""
-    $lblGuild.Location = New-Object System.Drawing.Point(110, 60)
-    $lblGuild.Size = New-Object System.Drawing.Size(375, 16)
+    $lblGuild.Location = New-Object System.Drawing.Point(158, 60)
+    $lblGuild.Size = New-Object System.Drawing.Size(327, 16)
     $lblGuild.Font = New-Object System.Drawing.Font("Georgia", 8.5, [System.Drawing.FontStyle]::Italic)
     $lblGuild.ForeColor = [System.Drawing.Color]::FromArgb(100, 220, 100)
     $lblGuild.TextAlign = 'MiddleCenter'
@@ -2516,68 +2938,46 @@ Function Abrir-PanelArmeria($formPadre) {
     $sepFicha.BackColor = [System.Drawing.Color]::FromArgb(60, 50, 40)
     $armForm.Controls.Add($sepFicha)
 
-    # Botones de acceso rápido (sustituyen al oro): PvP, Talentos, Reputaciones, Logros
-    $btnW = 110
-    $btnH = 26
-    $btnY = 88
-    $btnGap = 6
-    $btnX0 = 15
+    # Botones de acceso rapido como ICONOS (fila unica, centrados bajo la ficha)
+    # Personalizables: Imagenes\armeria\pvp.png, talentos.png, reputaciones.png,
+    #                  logros.png, transmog.png, establos.png
+    $szBtn = 48
+    $btnGap = 12
+    $numBtn = 6
+    $anchoFila = ($numBtn * $szBtn) + (($numBtn - 1) * $btnGap)
+    # Zona izquierda de la ficha: ~15..485 (ancho paperdoll 470)
+    $zonaIzq = 15
+    $zonaAncho = 470
+    $btnX0 = $zonaIzq + [int](($zonaAncho - $anchoFila) / 2)
+    if ($btnX0 -lt 15) { $btnX0 = 15 }
+    $btnY1 = 86
+    $btnX = $btnX0
 
-    $btnPvP = New-Object System.Windows.Forms.Button
-    $btnPvP.Text = "PvP"
-    $btnPvP.Location = New-Object System.Drawing.Point($btnX0, $btnY)
-    $btnPvP.Size = New-Object System.Drawing.Size($btnW, $btnH)
-    $btnPvP.BackColor = [System.Drawing.Color]::FromArgb(80, 25, 25)
-    $btnPvP.ForeColor = [System.Drawing.Color]::White
-    $btnPvP.FlatStyle = 'Flat'
-    $btnPvP.FlatAppearance.BorderSize = 1
-    $btnPvP.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
-    $btnPvP.Font = $fPeq
-    $btnPvP.Enabled = $false
-    $tooltip.SetToolTip($btnPvP, "Honor, arenas y muertes PvP")
+    $tipEst = "Monturas y mascotas de compania aprendidas"
+    try { $tipEst = (Obtener-Texto "TipEstablos" $tipEst) } catch {}
+
+    $btnPvP = Armeria-CrearBotonIcono $btnX $btnY1 "pvp" "PvP - Honor, arenas y muertes" ([System.Drawing.Color]::FromArgb(80, 25, 25)) $tooltip $szBtn
     $armForm.Controls.Add($btnPvP)
+    $btnX += $szBtn + $btnGap
 
-    $btnTalentos = New-Object System.Windows.Forms.Button
-    $btnTalentos.Text = "Talentos"
-    $btnTalentos.Location = New-Object System.Drawing.Point(($btnX0 + $btnW + $btnGap), $btnY)
-    $btnTalentos.Size = New-Object System.Drawing.Size($btnW, $btnH)
-    $btnTalentos.BackColor = [System.Drawing.Color]::FromArgb(45, 25, 70)
-    $btnTalentos.ForeColor = [System.Drawing.Color]::White
-    $btnTalentos.FlatStyle = 'Flat'
-    $btnTalentos.FlatAppearance.BorderSize = 1
-    $btnTalentos.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
-    $btnTalentos.Font = $fPeq
-    $btnTalentos.Enabled = $false
-    $tooltip.SetToolTip($btnTalentos, "Ver el árbol de talentos (dual spec)")
+    $btnTalentos = Armeria-CrearBotonIcono $btnX $btnY1 "talentos" "Talentos - Arbol de talentos (dual spec)" ([System.Drawing.Color]::FromArgb(45, 25, 70)) $tooltip $szBtn
     $armForm.Controls.Add($btnTalentos)
+    $btnX += $szBtn + $btnGap
 
-    $btnReputaciones = New-Object System.Windows.Forms.Button
-    $btnReputaciones.Text = "Reputaciones"
-    $btnReputaciones.Location = New-Object System.Drawing.Point(($btnX0 + 2*($btnW + $btnGap)), $btnY)
-    $btnReputaciones.Size = New-Object System.Drawing.Size($btnW, $btnH)
-    $btnReputaciones.BackColor = [System.Drawing.Color]::FromArgb(60, 45, 10)
-    $btnReputaciones.ForeColor = [System.Drawing.Color]::White
-    $btnReputaciones.FlatStyle = 'Flat'
-    $btnReputaciones.FlatAppearance.BorderSize = 1
-    $btnReputaciones.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
-    $btnReputaciones.Font = $fPeq
-    $btnReputaciones.Enabled = $false
-    $tooltip.SetToolTip($btnReputaciones, "Ver todas las reputaciones y su progreso")
+    $btnReputaciones = Armeria-CrearBotonIcono $btnX $btnY1 "reputaciones" "Reputaciones - Facciones y progreso" ([System.Drawing.Color]::FromArgb(60, 45, 10)) $tooltip $szBtn
     $armForm.Controls.Add($btnReputaciones)
+    $btnX += $szBtn + $btnGap
 
-    $btnLogros = New-Object System.Windows.Forms.Button
-    $btnLogros.Text = "Logros"
-    $btnLogros.Location = New-Object System.Drawing.Point(($btnX0 + 3*($btnW + $btnGap)), $btnY)
-    $btnLogros.Size = New-Object System.Drawing.Size($btnW, $btnH)
-    $btnLogros.BackColor = [System.Drawing.Color]::FromArgb(10, 45, 60)
-    $btnLogros.ForeColor = [System.Drawing.Color]::White
-    $btnLogros.FlatStyle = 'Flat'
-    $btnLogros.FlatAppearance.BorderSize = 1
-    $btnLogros.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
-    $btnLogros.Font = $fPeq
-    $btnLogros.Enabled = $false
-    $tooltip.SetToolTip($btnLogros, "Ver los últimos 10 logros completados")
+    $btnLogros = Armeria-CrearBotonIcono $btnX $btnY1 "logros" "Logros - Ultimos logros completados" ([System.Drawing.Color]::FromArgb(10, 45, 60)) $tooltip $szBtn
     $armForm.Controls.Add($btnLogros)
+    $btnX += $szBtn + $btnGap
+
+    $btnTransmog = Armeria-CrearBotonIcono $btnX $btnY1 "transmog" "Transmog - Apariencias aprendidas" ([System.Drawing.Color]::FromArgb(70, 30, 90)) $tooltip $szBtn
+    $armForm.Controls.Add($btnTransmog)
+    $btnX += $szBtn + $btnGap
+
+    $btnEstablos = Armeria-CrearBotonIcono $btnX $btnY1 "establos" $tipEst ([System.Drawing.Color]::FromArgb(30, 70, 50)) $tooltip $szBtn
+    $armForm.Controls.Add($btnEstablos)
 
     # Variables de contexto del personaje actual (actualizadas al buscar)
     $script:ArmeriaGuidActual = $null
@@ -2604,9 +3004,53 @@ Function Abrir-PanelArmeria($formPadre) {
             Mostrar-VentanaLogros $script:ArmeriaGuidActual $script:ArmeriaNombreActual $armForm
         }
     })
+    $btnTransmog.Add_Click({
+        if (-not $script:ArmeriaGuidActual) { return }
+        try {
+            if (Get-Command Mostrar-VentanaTransmog -ErrorAction SilentlyContinue) {
+                Mostrar-VentanaTransmog $script:ArmeriaGuidActual $script:ArmeriaNombreActual $armForm
+            } else {
+                $rutaTm = Join-Path $Global:RootDir "Transmog.ps1"
+                if (Test-Path $rutaTm) {
+                    Invoke-Expression (Get-Content $rutaTm -Raw -Encoding UTF8)
+                    if (Get-Command Mostrar-VentanaTransmog -ErrorAction SilentlyContinue) {
+                        Mostrar-VentanaTransmog $script:ArmeriaGuidActual $script:ArmeriaNombreActual $armForm
+                        return
+                    }
+                }
+                [System.Windows.Forms.MessageBox]::Show(
+                    ((Obtener-Texto "MsgModuloTransmogNoCargado" "No se cargo Transmog.ps1.`nColocalo en Scripts (junto a armeria.ps1) y reinicia el panel.`n`nRuta:`n{0}") -f $rutaTm),
+                    "Transmog", 'OK', 'Warning')
+            }
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Error al abrir Transmog:`n$($_.Exception.Message)", "Transmog", 'OK', 'Error')
+        }
+    })
+    $btnEstablos.Add_Click({
+        if (-not $script:ArmeriaGuidActual) { return }
+        try {
+            if (Get-Command Mostrar-VentanaEstablos -ErrorAction SilentlyContinue) {
+                Mostrar-VentanaEstablos $script:ArmeriaGuidActual $script:ArmeriaNombreActual $armForm
+            } else {
+                $rutaEs = Join-Path $Global:RootDir "Establos.ps1"
+                if (Test-Path $rutaEs) {
+                    Invoke-Expression (Get-Content $rutaEs -Raw -Encoding UTF8)
+                    if (Get-Command Mostrar-VentanaEstablos -ErrorAction SilentlyContinue) {
+                        Mostrar-VentanaEstablos $script:ArmeriaGuidActual $script:ArmeriaNombreActual $armForm
+                        return
+                    }
+                }
+                [System.Windows.Forms.MessageBox]::Show(
+                    ((Obtener-Texto "MsgModuloEstablosNoCargado" "No se cargo Establos.ps1.`nColocalo en Scripts y reinicia el panel.`n`nRuta:`n{0}") -f $rutaEs),
+                    (Obtener-Texto "BtnEstablos" "Establos"), 'OK', 'Warning')
+            }
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Error al abrir Establos:`n$($_.Exception.Message)", (Obtener-Texto "BtnEstablos" "Establos"), 'OK', 'Error')
+        }
+    })
 
     $sep = New-Object System.Windows.Forms.Panel
-    $sep.Location = New-Object System.Drawing.Point(15, 123)
+    $sep.Location = New-Object System.Drawing.Point(15, 140)
     $sep.Size = New-Object System.Drawing.Size(740, 1)
     $sep.BackColor = [System.Drawing.Color]::FromArgb(60, 50, 40)
     $armForm.Controls.Add($sep)
@@ -2635,7 +3079,7 @@ Function Abrir-PanelArmeria($formPadre) {
 
     $lblProfTitulo = New-Object System.Windows.Forms.Label
     $lblProfTitulo.Text      = "Profesiones"
-    $lblProfTitulo.Size      = New-Object System.Drawing.Size(255, 20)
+    $lblProfTitulo.Size      = New-Object System.Drawing.Size(245, 20)
     $lblProfTitulo.Font      = $fBold
     $lblProfTitulo.ForeColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
     $armForm.Controls.Add($lblProfTitulo)
@@ -2645,20 +3089,24 @@ Function Abrir-PanelArmeria($formPadre) {
     $panelProf.AutoScroll = $true
     $armForm.Controls.Add($panelProf)
 
-    $alturaPaneles = [math]::Max(360, $armForm.ClientSize.Height - 161)
+    $alturaPaneles = [math]::Max(360, $armForm.ClientSize.Height - 185)
     $alturaSep = $alturaPaneles + 22
-    $sepVert.Location = New-Object System.Drawing.Point(500, 131)
+    $sepVert.Location = New-Object System.Drawing.Point(500, 150)
     $sepVert.Size = New-Object System.Drawing.Size(1, $alturaSep)
+    $sepVert2.Location = New-Object System.Drawing.Point(520, 150)
     $sepVert2.Size = New-Object System.Drawing.Size(1, $alturaSep)
+    $sepVert3.Location = New-Object System.Drawing.Point(790, 150)
     $sepVert3.Size = New-Object System.Drawing.Size(1, $alturaSep)
-    $lblCargando.Location = New-Object System.Drawing.Point(15, 131)
+    $lblCargando.Location = New-Object System.Drawing.Point(15, 155)
     $lblCargando.Size = New-Object System.Drawing.Size(470, 20)
-    $panelDoll.Location = New-Object System.Drawing.Point(15, 153)
+    $panelDoll.Location = New-Object System.Drawing.Point(15, 175)
     $panelDoll.Size = New-Object System.Drawing.Size(470, $alturaPaneles)
+    $panelStats.Location = New-Object System.Drawing.Point(530, 175)
     $panelStats.Size = New-Object System.Drawing.Size(230, $alturaPaneles)
-    $lblProfTitulo.Location = New-Object System.Drawing.Point(755, 131)
-    $panelProf.Location = New-Object System.Drawing.Point(755, 153)
-    $panelProf.Size = New-Object System.Drawing.Size(290, $alturaPaneles)
+    $lblStatsTitulo.Location = New-Object System.Drawing.Point(530, 150)
+    $lblProfTitulo.Location = New-Object System.Drawing.Point(800, 150)
+    $panelProf.Location = New-Object System.Drawing.Point(800, 175)
+    $panelProf.Size = New-Object System.Drawing.Size(245, $alturaPaneles)
     $panelDoll.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
     $panelStats.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
     $panelProf.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
@@ -2682,11 +3130,14 @@ Function Abrir-PanelArmeria($formPadre) {
         $lblFicha.Text    = "Buscando..."
         $lblCargando.Text = ""
         $pbSilueta.Image  = $null
+        $pbSpec.Image     = $null
         $panelDoll.BackgroundImage = $null
         $btnPvP.Enabled = $false
         $btnTalentos.Enabled = $false
         $btnReputaciones.Enabled = $false
         $btnLogros.Enabled = $false
+        $btnTransmog.Enabled = $false
+        $btnEstablos.Enabled = $false
         $script:ArmeriaGuidActual = $null
 
         for ($s = 0; $s -le 18; $s++) {
@@ -2745,10 +3196,57 @@ Function Abrir-PanelArmeria($formPadre) {
             if ($claseIconNombre) { $imgClase = Descargar-IconoUI $claseIconNombre $ICON_BIG; if ($imgClase) { $pbClase.Image = $imgClase } }
 
             $lblNombreChar.Text = $nombre
-            $especNombre = Obtener-EspecializacionPersonaje $guid $claseId
+            $pbSpec.Image = $null
+            try { $tooltip.SetToolTip($pbSpec, "") } catch {}
+            $especNombre = $null
+            $tabSpec = 0
+            $especFuente = ""
+            $especDist = ""
+            try {
+                $especInfo = Obtener-EspecializacionPersonaje $guid $claseId
+                if ($especInfo) {
+                    $es = [string]$especInfo
+                    $parts = $es -split "\|"
+                    if ($parts.Count -ge 1) { $especNombre = $parts[0].Trim() }
+                    if ($parts.Count -ge 2) { try { $tabSpec = [int]$parts[1].Trim() } catch { $tabSpec = 0 } }
+                    if ($parts.Count -ge 3) { $especFuente = $parts[2].Trim() }
+                    if ($parts.Count -ge 4) { $especDist = $parts[3].Trim() }
+                }
+            } catch {}
+            if ($tabSpec -gt 0) {
+                try {
+                    $iconName = $null
+                    if ($Global:ArmeriaTalentTabIconos) {
+                        if ($Global:ArmeriaTalentTabIconos.ContainsKey($tabSpec)) {
+                            $iconName = $Global:ArmeriaTalentTabIconos[$tabSpec]
+                        } elseif ($Global:ArmeriaTalentTabIconos.ContainsKey("$tabSpec")) {
+                            $iconName = $Global:ArmeriaTalentTabIconos["$tabSpec"]
+                        }
+                    }
+                    if ($iconName) {
+                        $imgSpec = Descargar-IconoPorNombre $iconName $ICON_BIG ("spec$tabSpec")
+                        if ($imgSpec) {
+                            $pbSpec.Image = $imgSpec
+                        }
+                    }
+                } catch {}
+            }
+            # Tooltip de depuracion en el icono de spec
+            try {
+                $tipSpec = if ($especNombre) { $especNombre } else { "(sin especializacion)" }
+                $tipSpec += "`nTabId: $tabSpec"
+                if ($especDist) { $tipSpec += "`nPuntos: $especDist" }
+                if ($especFuente) { $tipSpec += "`nFuente: $especFuente" }
+                try {
+                    if ($Global:RootDir) {
+                        $tipSpec += "`nCache: " + (Join-Path $Global:RootDir ("Armeria\Cache\spec_{0}.txt" -f $guid))
+                    }
+                } catch {}
+                $tooltip.SetToolTip($pbSpec, $tipSpec)
+            } catch {}
             if ($especNombre) { $lblFicha.Text = "Nivel $($rLevel.Trim())  ·  $raza  ·  $clase  ·  $especNombre" }
             else { $lblFicha.Text = "Nivel $($rLevel.Trim())  ·  $raza  ·  $clase" }
-            $lblGuild.Text      = if ($hermandad -ne "-") { "< $hermandad >" } else { "" }
+                        $lblGuild.Text      = if ($hermandad -ne "-") { "< $hermandad >" } else { "" }
 
             $itemsRaw = Consulta-Armeria "SELECT ci.slot, ii.guid, ii.itemEntry, it.name, it.Quality FROM character_inventory ci JOIN item_instance ii ON ii.guid=ci.item JOIN acore_world.item_template it ON it.entry=ii.itemEntry WHERE ci.guid=$guid AND ci.bag=0 AND ci.slot BETWEEN 0 AND 18 ORDER BY ci.slot;" "acore_characters"
 
@@ -2951,6 +3449,8 @@ Function Abrir-PanelArmeria($formPadre) {
             $btnTalentos.Enabled = $true
             $btnReputaciones.Enabled = $true
             $btnLogros.Enabled = $true
+            $btnTransmog.Enabled = $true
+            $btnEstablos.Enabled = $true
 
             $panelProf.Controls.Clear()
             $profsRaw = Consulta-Armeria "SELECT CONCAT(skill,'|',value,'|',max) FROM character_skills WHERE guid=$guid AND skill IN (164,165,171,182,185,186,197,202,333,393,755,773,129,356) ORDER BY skill;" "acore_characters"
@@ -3115,6 +3615,54 @@ Function Abrir-PanelArmeria($formPadre) {
     $txtNombre.Add_KeyDown({
         if ($_.KeyCode -eq 'Enter') { $btnBuscar.PerformClick() }
     })
+
+    # Auto-buscar si se paso nombre (desde poblacion del panel, etc.)
+    $autoNom = $null
+    try {
+        if ($nombreInicial -and ([string]$nombreInicial).Trim().Length -gt 0) {
+            $autoNom = ([string]$nombreInicial).Trim()
+        } elseif ($Global:ArmeriaAutoBuscar -and ([string]$Global:ArmeriaAutoBuscar).Trim().Length -gt 0) {
+            $autoNom = ([string]$Global:ArmeriaAutoBuscar).Trim()
+        }
+    } catch {}
+    # Referencias script para el handler (evitar NULL en el Tick)
+    $script:ArmeriaTxtNombreRef = $txtNombre
+    $script:ArmeriaBtnBuscarRef = $btnBuscar
+    if ($autoNom) {
+        $script:ArmeriaAutoNombrePendiente = $autoNom
+        try { $txtNombre.Text = $autoNom } catch {}
+        $armForm.Add_Shown({
+            try {
+                $n = $script:ArmeriaAutoNombrePendiente
+                if (-not $n) { return }
+                if ($script:ArmeriaTxtNombreRef) {
+                    $script:ArmeriaTxtNombreRef.Text = $n
+                }
+                $tm = New-Object System.Windows.Forms.Timer
+                $tm.Interval = 250
+                $script:ArmeriaAutoTimer = $tm
+                $tm.Add_Tick({
+                    try {
+                        if ($script:ArmeriaAutoTimer) {
+                            $script:ArmeriaAutoTimer.Stop()
+                            $script:ArmeriaAutoTimer.Dispose()
+                            $script:ArmeriaAutoTimer = $null
+                        }
+                    } catch {}
+                    try {
+                        if ($script:ArmeriaBtnBuscarRef) {
+                            $script:ArmeriaBtnBuscarRef.PerformClick()
+                        }
+                    } catch {}
+                    try {
+                        $script:ArmeriaAutoNombrePendiente = $null
+                        $Global:ArmeriaAutoBuscar = $null
+                    } catch {}
+                })
+                $tm.Start()
+            } catch {}
+        })
+    }
 
     $armForm.ShowDialog() | Out-Null
 }
