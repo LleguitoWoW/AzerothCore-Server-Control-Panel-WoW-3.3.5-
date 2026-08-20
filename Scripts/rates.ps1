@@ -142,9 +142,9 @@ Function Abrir-PanelRates($parentForm) {
     $subForm.MaximizeBox = $false
     $subForm.MinimizeBox = $false
 
-    $fGroup = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $fLabel = New-Object System.Drawing.Font("Segoe UI", 9)
-    $fDesc  = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+    $fGroup = New-Object System.Drawing.Font("Georgia", 10, [System.Drawing.FontStyle]::Bold)
+    $fLabel = New-Object System.Drawing.Font("Georgia", 9)
+    $fDesc  = New-Object System.Drawing.Font("Georgia", 8, [System.Drawing.FontStyle]::Italic)
 
     $CamposRates = @{}
     $CamposOpciones = @{}
@@ -307,7 +307,7 @@ Function Abrir-PanelRates($parentForm) {
     $boxCriaturas.Font = $fGroup
     $subForm.Controls.Add($boxCriaturas)
 
-    $fColHead = New-Object System.Drawing.Font("Segoe UI", 7.5, [System.Drawing.FontStyle]::Bold)
+    $fColHead = New-Object System.Drawing.Font("Georgia", 7.5, [System.Drawing.FontStyle]::Bold)
     $sufijosCriaturas    = @("Normal", "Elite.Elite", "Elite.RARE", "Elite.RAREELITE", "Elite.WORLDBOSS")
     $encabezadosCriaturas = @(
         (Obtener-Texto "ColNormal" "Normal"),

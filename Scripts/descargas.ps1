@@ -13,9 +13,9 @@ Function Abrir-PanelDescargas($parentForm) {
     $subForm.MaximizeBox = $false
     $subForm.MinimizeBox = $false
 
-    $fInfo  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
-    $fGroup = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $fLink  = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+    $fInfo  = New-Object System.Drawing.Font("Georgia", 9, [System.Drawing.FontStyle]::Italic)
+    $fGroup = New-Object System.Drawing.Font("Georgia", 10, [System.Drawing.FontStyle]::Bold)
+    $fLink  = New-Object System.Drawing.Font("Georgia", 11, [System.Drawing.FontStyle]::Bold)
 
     # ------------------------------------------
     # CAJA CON LOS 3 ENLACES DE DESCARGA

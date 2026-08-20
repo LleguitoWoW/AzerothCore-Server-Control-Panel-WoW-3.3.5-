@@ -406,10 +406,10 @@ Function Abrir-PanelInyectarSQL($parentForm) {
     $subForm.MaximizeBox = $false
     $subForm.MinimizeBox = $false
 
-    $fLabel = New-Object System.Drawing.Font("Segoe UI", 9)
+    $fLabel = New-Object System.Drawing.Font("Georgia", 9)
     $fMono = New-Object System.Drawing.Font("Consolas", 9)
-    $fBold = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    $fAvisoLocal = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+    $fBold = New-Object System.Drawing.Font("Georgia", 9, [System.Drawing.FontStyle]::Bold)
+    $fAvisoLocal = New-Object System.Drawing.Font("Georgia", 8, [System.Drawing.FontStyle]::Italic)
 
     $lblDB = New-Object System.Windows.Forms.Label
     $lblDB.Text = Obtener-Texto "LblBaseDatos" "Base de datos destino:"
@@ -537,7 +537,7 @@ Function Abrir-ListaGuildDumps($parentForm, $txtDestino) {
     $listForm.MaximizeBox = $false
     $listForm.MinimizeBox = $false
 
-    $fListado = New-Object System.Drawing.Font("Segoe UI", 9)
+    $fListado = New-Object System.Drawing.Font("Georgia", 9)
 
     $lblInfo = New-Object System.Windows.Forms.Label
     $lblInfo.Text = Obtener-Texto "MsgCarpetaDumps" "Buscando en la carpeta del WorldServer:"
@@ -587,7 +587,7 @@ Function Abrir-ListaGuildDumps($parentForm, $txtDestino) {
     $btnUsar.Size = New-Object System.Drawing.Size(295, 30)
     $btnUsar.BackColor = [System.Drawing.Color]::SteelBlue
     $btnUsar.FlatStyle = 'Flat'
-    $btnUsar.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $btnUsar.Font = New-Object System.Drawing.Font("Georgia", 9, [System.Drawing.FontStyle]::Bold)
 
     $usarSeleccion = {
         if ($hayArchivos -and $listBox.SelectedItem) {
@@ -617,9 +617,9 @@ Function Abrir-PanelHermandadSQL($parentForm) {
     $subForm.MaximizeBox = $false
     $subForm.MinimizeBox = $false
 
-    $fLabel = New-Object System.Drawing.Font("Segoe UI", 9)
+    $fLabel = New-Object System.Drawing.Font("Georgia", 9)
     $fMono = New-Object System.Drawing.Font("Consolas", 9)
-    $fBold = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $fBold = New-Object System.Drawing.Font("Georgia", 9, [System.Drawing.FontStyle]::Bold)
 
     # -- Fila: nombre de hermandad + generar/abrir --
     $lblNombreGuild = New-Object System.Windows.Forms.Label
@@ -817,7 +817,7 @@ Function Abrir-PanelHermandadSQL($parentForm) {
     $subForm.Controls.Add($btnAutoItemBase)
 
     # -- Aviso --
-    $fAviso = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+    $fAviso = New-Object System.Drawing.Font("Georgia", 8, [System.Drawing.FontStyle]::Italic)
     $lblAviso = New-Object System.Windows.Forms.Label
     $lblAviso.Text = Obtener-Texto "MsgAvisoHermandadSQL" "El personaje del GM debe existir YA en este servidor. RECOMENDADO: para el WorldServer antes de pulsar 'Inyectar' (evita que el objeto choque con GUIDs que el servidor reserva en memoria mientras esta encendido) y vuelve a arrancarlo despues."
     $lblAviso.Location = New-Object System.Drawing.Point(15, 504)
@@ -1032,7 +1032,7 @@ Function Abrir-ListaDumps($parentForm, $txtDestino) {
     $listForm.MaximizeBox = $false
     $listForm.MinimizeBox = $false
 
-    $fListado = New-Object System.Drawing.Font("Segoe UI", 9)
+    $fListado = New-Object System.Drawing.Font("Georgia", 9)
 
     $lblInfo = New-Object System.Windows.Forms.Label
     $lblInfo.Text = Obtener-Texto "MsgCarpetaDumps" "Buscando en la carpeta del WorldServer:"
@@ -1085,7 +1085,7 @@ Function Abrir-ListaDumps($parentForm, $txtDestino) {
     $btnUsar.Size = New-Object System.Drawing.Size(295, 30)
     $btnUsar.BackColor = [System.Drawing.Color]::SteelBlue
     $btnUsar.FlatStyle = 'Flat'
-    $btnUsar.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $btnUsar.Font = New-Object System.Drawing.Font("Georgia", 9, [System.Drawing.FontStyle]::Bold)
 
     $usarSeleccion = {
         if ($hayArchivos -and $listBox.SelectedItem) {
@@ -1112,9 +1112,9 @@ Function Abrir-PanelPersonajes($parentForm) {
     $subForm.MaximizeBox = $false
     $subForm.MinimizeBox = $false
 
-    $fLabel = New-Object System.Drawing.Font("Segoe UI", 9)
-    $fGroup = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $fAviso = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Italic)
+    $fLabel = New-Object System.Drawing.Font("Georgia", 9)
+    $fGroup = New-Object System.Drawing.Font("Georgia", 10, [System.Drawing.FontStyle]::Bold)
+    $fAviso = New-Object System.Drawing.Font("Georgia", 8.5, [System.Drawing.FontStyle]::Italic)
 
     # ------------------------------------------
     # SUBSECCIÓN 1: SALVAR PERSONAJE

@@ -25,7 +25,7 @@ function Abrir-PanelReino {
     $lblId.Location = New-Object System.Drawing.Point(20, 40)
     $lblId.Size = New-Object System.Drawing.Size(330, 18)
     $lblId.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 150)
-    $lblId.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+    $lblId.Font = New-Object System.Drawing.Font("Georgia", 8, [System.Drawing.FontStyle]::Italic)
     $mf.Controls.Add($lblId)
 
     # --- Nombre del reino ---
@@ -106,7 +106,7 @@ function Abrir-PanelReino {
     $lblInfo.Location = New-Object System.Drawing.Point(20, 246)
     $lblInfo.Size = New-Object System.Drawing.Size(330, 30)
     $lblInfo.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 150)
-    $lblInfo.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $lblInfo.Font = New-Object System.Drawing.Font("Georgia", 8)
     $mf.Controls.Add($lblInfo)
 
     $script:ReinoIdActual = $null

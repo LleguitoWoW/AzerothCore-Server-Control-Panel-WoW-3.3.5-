@@ -5,12 +5,60 @@ try {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
 
-    # $Global:RootDir = carpeta "Scripts" (donde vive este archivo)
-    # $Global:AppRoot = carpeta raíz de la aplicación (un nivel arriba de Scripts)
-    # $Global:ImgDir  = carpeta "Imagenes" dentro de la raíz
-    $Global:RootDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-    $Global:AppRoot = Split-Path -Parent $Global:RootDir
-    $Global:ImgDir  = Join-Path $Global:AppRoot "Imagenes"
+    # Rutas: Scripts\ = RootDir, padre = AppRoot (modo .ps1 y .exe)
+    $scriptPath = $null
+    try {
+        if ($PSScriptRoot) { $scriptPath = Join-Path $PSScriptRoot "Panel-GUI.ps1" }
+    } catch {}
+    try {
+        if (-not $scriptPath -and $MyInvocation.MyCommand.Definition) {
+            $scriptPath = [string]$MyInvocation.MyCommand.Definition
+        }
+    } catch {}
+    try {
+        if (-not $scriptPath -and $PSCommandPath) { $scriptPath = [string]$PSCommandPath }
+    } catch {}
+    try {
+        if (-not $scriptPath -and $MyInvocation.MyCommand.Path) {
+            $scriptPath = [string]$MyInvocation.MyCommand.Path
+        }
+    } catch {}
+    try {
+        if (-not $scriptPath) {
+            $scriptPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        }
+    } catch {}
+
+    $exeDir = $null
+    if ($scriptPath -and [string]$scriptPath -ne "") {
+        try { $exeDir = Split-Path -Parent -Path $scriptPath } catch { $exeDir = $null }
+    }
+    if (-not $exeDir -and $PSScriptRoot) { $exeDir = $PSScriptRoot }
+
+    if ($exeDir -and ((Split-Path -Leaf -Path $exeDir) -ieq "Scripts")) {
+        $Global:RootDir = $exeDir
+        $Global:AppRoot = Split-Path -Parent -Path $exeDir
+    } elseif ($exeDir) {
+        $Global:AppRoot = $exeDir
+        $Global:RootDir = Join-Path $Global:AppRoot "Scripts"
+        if (-not (Test-Path -LiteralPath $Global:RootDir)) {
+            $Global:RootDir = $Global:AppRoot
+        }
+    } else {
+        # Ultimo recurso: directorio de trabajo actual
+        $cwd = (Get-Location).Path
+        if ((Split-Path -Leaf -Path $cwd) -ieq "Scripts") {
+            $Global:RootDir = $cwd
+            $Global:AppRoot = Split-Path -Parent -Path $cwd
+        } else {
+            $Global:AppRoot = $cwd
+            $cand = Join-Path $cwd "Scripts"
+            if (Test-Path -LiteralPath $cand) { $Global:RootDir = $cand } else { $Global:RootDir = $cwd }
+        }
+    }
+    if (-not $Global:AppRoot) { $Global:AppRoot = (Get-Location).Path }
+    if (-not $Global:RootDir) { $Global:RootDir = $Global:AppRoot }
+    $Global:ImgDir = Join-Path $Global:AppRoot "Imagenes"
 
     $ConfigFile = Join-Path $Global:AppRoot "config_server.txt"
     $CtrlCScript = Join-Path $Global:RootDir "send-ctrlc.ps1"
@@ -23,6 +71,7 @@ try {
     $TransmogScript = Join-Path $Global:RootDir "Transmog.ps1"
     $EstablosScript = Join-Path $Global:RootDir "Establos.ps1"
     $RealmScript = Join-Path $Global:RootDir "realm.ps1"
+    $ModsGestionScript = Join-Path $Global:RootDir "mods.ps1"
 
     # =========================================================================
     # CARGA SEGURA DE MÓDULOS EN UTF-8 (Evita errores en 'ñ', '¡' y acentos)
@@ -101,6 +150,13 @@ try {
                 "Aviso", 'OK', 'Warning')
         }
     }
+    if (Test-Path $ModsGestionScript) {
+        try {
+            $contenidoModsGestion = Get-Content $ModsGestionScript -Raw -Encoding UTF8
+            Invoke-Expression $contenidoModsGestion
+        } catch {}
+    }
+
 
     if (Test-Path $RealmScript) {
         try {
@@ -166,6 +222,9 @@ try {
     $Global:WowExe = ""
     $Global:WorldConfPath = ""
     $Global:ModsDir = ""
+    $Global:KeiraExe = ""
+    $Global:TrinityCreatorExe = ""
+    $Global:HeidiExe = ""
     $Global:MysqlAdminUser = "root"
     $Global:MysqlAdminPass = ""
     $Global:CharDbName = "acore_characters"
@@ -251,6 +310,9 @@ try {
                 if ($_ -match "^MYSQL_ADMIN_PASS=(.*)") { $Global:MysqlAdminPass = $Matches[1] }
                 if ($_ -match "^CHAR_DB=(.*)") { $Global:CharDbName = $Matches[1] }
                 if ($_ -match "^LANG=(.*)") { $Global:Idioma = $Matches[1] }
+                if ($_ -match "^KEIRA_EXE=(.*)") { $Global:KeiraExe = $Matches[1] }
+                if ($_ -match "^TRINITY_CREATOR_EXE=(.*)") { $Global:TrinityCreatorExe = $Matches[1] }
+                if ($_ -match "^HEIDI_EXE=(.*)") { $Global:HeidiExe = $Matches[1] }
             }
         }
         
@@ -261,7 +323,7 @@ try {
     }
 
     Function Guardar-Configuracion {
-        $configContenido = "MYSQL_DIR=$($Global:MysqlDir)`nAUTH_DIR=$($Global:AuthDir)`nWORLD_DIR=$($Global:WorldDir)`nWOW_EXE=$($Global:WowExe)`nWORLDCONF_PATH=$($Global:WorldConfPath)`nMODS_DIR=$($Global:ModsDir)`nMYSQL_USER=$($Global:MysqlUser)`nMYSQL_PASS=$($Global:MysqlPass)`nMYSQL_ADMIN_USER=$($Global:MysqlAdminUser)`nMYSQL_ADMIN_PASS=$($Global:MysqlAdminPass)`nCHAR_DB=$($Global:CharDbName)`nLANG=$($Global:Idioma)"
+        $configContenido = "MYSQL_DIR=$($Global:MysqlDir)`nAUTH_DIR=$($Global:AuthDir)`nWORLD_DIR=$($Global:WorldDir)`nWOW_EXE=$($Global:WowExe)`nWORLDCONF_PATH=$($Global:WorldConfPath)`nMODS_DIR=$($Global:ModsDir)`nMYSQL_USER=$($Global:MysqlUser)`nMYSQL_PASS=$($Global:MysqlPass)`nMYSQL_ADMIN_USER=$($Global:MysqlAdminUser)`nMYSQL_ADMIN_PASS=$($Global:MysqlAdminPass)`nCHAR_DB=$($Global:CharDbName)`nLANG=$($Global:Idioma)`nKEIRA_EXE=$($Global:KeiraExe)`nTRINITY_CREATOR_EXE=$($Global:TrinityCreatorExe)`nHEIDI_EXE=$($Global:HeidiExe)"
         $configContenido | Out-File -FilePath $ConfigFile -Encoding UTF8
     }
 
@@ -309,9 +371,9 @@ try {
         $credForm.MaximizeBox = $false
         $credForm.MinimizeBox = $false
 
-        $fLabelCred = New-Object System.Drawing.Font("Segoe UI", 9)
-        $fGrupoCred = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
-        $fAvisoCred = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+        $fLabelCred = New-Object System.Drawing.Font("Georgia", 9)
+        $fGrupoCred = New-Object System.Drawing.Font("Georgia", 9.5, [System.Drawing.FontStyle]::Bold)
+        $fAvisoCred = New-Object System.Drawing.Font("Georgia", 8, [System.Drawing.FontStyle]::Italic)
 
         $boxApp = New-Object System.Windows.Forms.GroupBox
         $boxApp.Text = Obtener-Texto "GrpMysqlApp" "Usuario de la aplicacion (hermandades, personajes...)"
@@ -445,23 +507,24 @@ try {
     # ==========================================
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Panel de Control - Lleguito"
-    $form.Size = New-Object System.Drawing.Size(920, 635)
+    $form.Size = New-Object System.Drawing.Size(920, 730)
     $form.StartPosition = 'CenterScreen'
     $form.BackColor = [System.Drawing.Color]::FromArgb(22, 22, 26)
     $form.ForeColor = [System.Drawing.Color]::White
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox = $false
 
+
     $ColorAcento = [System.Drawing.Color]::FromArgb(94, 129, 244)
     $ColorAcentoSuave = [System.Drawing.Color]::FromArgb(150, 160, 175)
     $ColorLateral = [System.Drawing.Color]::FromArgb(28, 28, 34)
     $ColorLateralBtn = [System.Drawing.Color]::FromArgb(40, 40, 48)
 
-    $fontTitulo = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
-    $fontNormal = New-Object System.Drawing.Font("Segoe UI", 10)
-    $fontEstado = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $fontSeccion = New-Object System.Drawing.Font("Segoe UI Semibold", 9)
-    $fontLateral = New-Object System.Drawing.Font("Segoe UI", 9)
+    $fontTitulo = New-Object System.Drawing.Font("Georgia", 14, [System.Drawing.FontStyle]::Bold)
+    $fontNormal = New-Object System.Drawing.Font("Georgia", 10)
+    $fontEstado = New-Object System.Drawing.Font("Georgia", 10, [System.Drawing.FontStyle]::Bold)
+    $fontSeccion = New-Object System.Drawing.Font("Georgia", 9)
+    $fontLateral = New-Object System.Drawing.Font("Georgia", 9)
 
     Function Aclarar-Color($color, $cantidad) {
         $r = [Math]::Min(255, $color.R + $cantidad)
@@ -495,6 +558,12 @@ try {
                 "npcbots" = "ability_hunter_pet_spider"
                 "mods" = "inv_misc_wrench_01"
                 "reino" = "inv_misc_map_01"
+                "limpiar" = "inv_misc_bone_skull_02"
+                "cache" = "inv_misc_bone_skull_02"
+                "utilidades" = "inv_misc_gear_01"
+                "keira" = "inv_misc_book_11"
+                "trinity" = "inv_misc_wrench_01"
+                "heidi" = "inv_misc_enggizmos_17"
             }
             $nomWow = $nomLow
             if ($aliasWow.ContainsKey($nomLow)) { $nomWow = $aliasWow[$nomLow] }
@@ -689,6 +758,244 @@ try {
         [void]$mf.ShowDialog($form)
     }
 
+
+    Function Borrar-CacheArmeriaCompleta {
+        $dirArmeria = $null
+        if ($Global:RootDir) {
+            $dirArmeria = Join-Path $Global:RootDir "Armeria"
+        }
+        if (-not $dirArmeria -or -not (Test-Path -LiteralPath $dirArmeria)) {
+            $msgNo = Obtener-Texto "MsgCacheArmeriaNoExiste" "No se encontro la carpeta de cache Armeria.`n`nRuta esperada:`n{0}"
+            [System.Windows.Forms.MessageBox]::Show(
+                ($msgNo -f $dirArmeria),
+                (Obtener-Texto "BtnBorrarCacheArmeria" "Borrar cache Armeria"),
+                'OK', 'Information')
+            return
+        }
+
+        $plantilla = Obtener-Texto "MsgConfirmarBorrarCacheArmeria" "ATENCION: Se eliminara TODA la carpeta de cache de la Armeria:`n`n  {0}`n`nSe borraran (si existen):`n  - Iconos descargados (items, UI, spells...)`n  - Capturas de pantalla de Wowhead (screenshots)`n  - Fondos de talentos / PvP`n  - Cache JSON de personajes`n  - Tooltips y datos temporales`n`nNO se borran los iconos personalizados del panel en:`n  Imagenes\menu\  y  Imagenes\armeria\`n`nSi has puesto iconos o fondos DENTRO de Scripts\Armeria\, haz una copia de seguridad antes.`n`n¿Seguro que quieres continuar?"
+        $aviso = $plantilla -f $dirArmeria
+
+        $r = [System.Windows.Forms.MessageBox]::Show(
+            $aviso,
+            (Obtener-Texto "TituloBorrarCacheArmeria" "Borrar cache Armeria"),
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning,
+            [System.Windows.Forms.MessageBoxDefaultButton]::Button2)
+
+        if ($r -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
+        try {
+            Remove-Item -LiteralPath $dirArmeria -Recurse -Force -ErrorAction Stop
+            [System.Windows.Forms.MessageBox]::Show(
+                (Obtener-Texto "MsgCacheArmeriaBorrada" "Cache de Armeria eliminada correctamente.`n`nSe regenerara al usar Armeria / Transmog / Establos."),
+                (Obtener-Texto "TituloBorrarCacheArmeria" "Borrar cache Armeria"),
+                'OK', 'Information')
+        } catch {
+            $msgErr = Obtener-Texto "MsgCacheArmeriaError" "No se pudo borrar la carpeta:`n{0}"
+            [System.Windows.Forms.MessageBox]::Show(
+                ($msgErr -f $_.Exception.Message),
+                (Obtener-Texto "TituloBorrarCacheArmeria" "Borrar cache Armeria"),
+                'OK', 'Error')
+        }
+    }
+
+
+    Function Lanzar-EjecutableUtilidad($ruta, $nombreApp) {
+        if (-not $ruta -or -not (Test-Path -LiteralPath $ruta)) {
+            [System.Windows.Forms.MessageBox]::Show(
+                ((Obtener-Texto "MsgUtilExeNoConfig" "No hay ruta configurada para {0}.`nUsa el boton de configurar ruta.") -f $nombreApp),
+                (Obtener-Texto "TituloUtilidades" "Utilidades servidor"),
+                'OK', 'Warning')
+            return
+        }
+        try {
+            $dir = Split-Path -Parent $ruta
+            Start-Process -FilePath $ruta -WorkingDirectory $dir
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                ((Obtener-Texto "MsgUtilExeError" "No se pudo abrir {0}:`n{1}") -f $nombreApp, $_.Exception.Message),
+                (Obtener-Texto "TituloUtilidades" "Utilidades servidor"),
+                'OK', 'Error')
+        }
+    }
+
+    Function Obtener-IconoEjecutable($ruta, $size) {
+        if (-not $size) { $size = 32 }
+        try {
+            if ($ruta -and (Test-Path -LiteralPath $ruta)) {
+                $ico = [System.Drawing.Icon]::ExtractAssociatedIcon($ruta)
+                if ($ico) {
+                    $bmp = New-Object System.Drawing.Bitmap $size, $size
+                    $g = [System.Drawing.Graphics]::FromImage($bmp)
+                    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                    $g.Clear([System.Drawing.Color]::Transparent)
+                    $g.DrawIcon($ico, (New-Object System.Drawing.Rectangle 0, 0, $size, $size))
+                    $g.Dispose()
+                    return $bmp
+                }
+            }
+        } catch {}
+        # Icono generico si no hay ruta
+        try {
+            $bmp = New-Object System.Drawing.Bitmap $size, $size
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.Clear([System.Drawing.Color]::FromArgb(60, 55, 50))
+            $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(180, 170, 150)), 2
+            $g.DrawRectangle($pen, 4, 4, ($size - 9), ($size - 9))
+            $pen.Dispose()
+            $g.Dispose()
+            return $bmp
+        } catch { return $null }
+    }
+
+    Function Abrir-PanelUtilidadesServidor {
+        $uForm = New-Object System.Windows.Forms.Form
+        $uForm.Text = (Obtener-Texto "TituloUtilidades" "Utilidades servidor")
+        $uForm.Size = New-Object System.Drawing.Size(580, 420)
+        $uForm.StartPosition = 'CenterParent'
+        $uForm.BackColor = [System.Drawing.Color]::FromArgb(18, 16, 14)
+        $uForm.ForeColor = [System.Drawing.Color]::White
+        $uForm.FormBorderStyle = 'FixedDialog'
+        $uForm.MaximizeBox = $false
+        $uForm.MinimizeBox = $false
+
+        $fTitle = New-Object System.Drawing.Font("Georgia", 13, [System.Drawing.FontStyle]::Bold)
+        $fPeq = New-Object System.Drawing.Font("Georgia", 8.5)
+        $fDesc = New-Object System.Drawing.Font("Georgia", 8, [System.Drawing.FontStyle]::Italic)
+        $fBtn = New-Object System.Drawing.Font("Georgia", 10, [System.Drawing.FontStyle]::Bold)
+
+        $lblTit = New-Object System.Windows.Forms.Label
+        $lblTit.Text = (Obtener-Texto "TituloUtilidades" "Utilidades servidor")
+        $lblTit.Location = New-Object System.Drawing.Point(20, 14)
+        $lblTit.Size = New-Object System.Drawing.Size(520, 26)
+        $lblTit.Font = $fTitle
+        $lblTit.ForeColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
+        $uForm.Controls.Add($lblTit)
+
+        $lblInfo = New-Object System.Windows.Forms.Label
+        $lblInfo.Text = (Obtener-Texto "MsgUtilidadesInfo" "Herramientas externas para el servidor. Configura cada .exe una vez (boton Ruta).")
+        $lblInfo.Location = New-Object System.Drawing.Point(24, 46)
+        $lblInfo.Size = New-Object System.Drawing.Size(520, 28)
+        $lblInfo.Font = $fPeq
+        $lblInfo.ForeColor = [System.Drawing.Color]::FromArgb(220, 200, 160)
+        $uForm.Controls.Add($lblInfo)
+
+        Function Nuevo-BotonUtil($texto, $y, $color, $rutaExe, $click) {
+            $b = New-Object System.Windows.Forms.Button
+            $b.Text = "  " + $texto
+            $b.Location = New-Object System.Drawing.Point(30, $y)
+            $b.Size = New-Object System.Drawing.Size(340, 48)
+            $b.FlatStyle = 'Flat'
+            $b.FlatAppearance.BorderSize = 1
+            $b.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(255, 210, 0)
+            $b.BackColor = $color
+            $b.ForeColor = [System.Drawing.Color]::White
+            $b.Font = $fBtn
+            $b.Cursor = [System.Windows.Forms.Cursors]::Hand
+            $b.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+            $b.ImageAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+            $b.TextImageRelation = [System.Windows.Forms.TextImageRelation]::ImageBeforeText
+            $img = Obtener-IconoEjecutable $rutaExe 28
+            if ($img) {
+                $b.Image = $img
+                $b.Padding = New-Object System.Windows.Forms.Padding(6, 0, 0, 0)
+            }
+            $b.Add_Click($click)
+            return $b
+        }
+        Function Nuevo-BotonRuta($y, $click) {
+            $b = New-Object System.Windows.Forms.Button
+            $b.Text = (Obtener-Texto "BtnConfigRuta" "Ruta...")
+            $b.Location = New-Object System.Drawing.Point(380, $y)
+            $b.Size = New-Object System.Drawing.Size(150, 48)
+            $b.FlatStyle = 'Flat'
+            $b.FlatAppearance.BorderSize = 1
+            $b.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(120, 110, 90)
+            $b.BackColor = [System.Drawing.Color]::FromArgb(50, 45, 40)
+            $b.ForeColor = [System.Drawing.Color]::White
+            $b.Font = $fPeq
+            $b.Cursor = [System.Windows.Forms.Cursors]::Hand
+            $b.Add_Click($click)
+            return $b
+        }
+
+        # --- Keira ---
+        $lblDescKeira = New-Object System.Windows.Forms.Label
+        $lblDescKeira.Text = (Obtener-Texto "DescKeira" "Editor visual de la base de datos del mundo (criaturas, objetos, quests, hechizos...).")
+        $lblDescKeira.Location = New-Object System.Drawing.Point(30, 84)
+        $lblDescKeira.Size = New-Object System.Drawing.Size(500, 22)
+        $lblDescKeira.Font = $fDesc
+        $lblDescKeira.ForeColor = [System.Drawing.Color]::FromArgb(160, 190, 220)
+        $uForm.Controls.Add($lblDescKeira)
+
+        $btnKeira = Nuevo-BotonUtil (Obtener-Texto "BtnKeira" "Keira3") 108 ([System.Drawing.Color]::FromArgb(40, 70, 110)) $Global:KeiraExe {
+            Lanzar-EjecutableUtilidad $Global:KeiraExe "Keira"
+        }
+        $uForm.Controls.Add($btnKeira)
+        $btnKeiraRuta = Nuevo-BotonRuta 108 {
+            $r = Seleccionar-Archivo (Obtener-Texto "TituloSelKeira" "Seleccionar Keira (.exe)")
+            if ($r) {
+                $Global:KeiraExe = $r
+                Guardar-Configuracion
+                $img = Obtener-IconoEjecutable $r 28
+                if ($img) { $btnKeira.Image = $img }
+            }
+        }
+        $uForm.Controls.Add($btnKeiraRuta)
+
+        # --- Trinity Creator ---
+        $lblDescTC = New-Object System.Windows.Forms.Label
+        $lblDescTC.Text = (Obtener-Texto "DescTrinityCreator" "Crea y edita items, NPCs, quests y contenido personalizado para el emulador.")
+        $lblDescTC.Location = New-Object System.Drawing.Point(30, 170)
+        $lblDescTC.Size = New-Object System.Drawing.Size(500, 22)
+        $lblDescTC.Font = $fDesc
+        $lblDescTC.ForeColor = [System.Drawing.Color]::FromArgb(190, 170, 220)
+        $uForm.Controls.Add($lblDescTC)
+
+        $btnTC = Nuevo-BotonUtil (Obtener-Texto "BtnTrinityCreator" "Trinity Creator") 194 ([System.Drawing.Color]::FromArgb(70, 50, 90)) $Global:TrinityCreatorExe {
+            Lanzar-EjecutableUtilidad $Global:TrinityCreatorExe "Trinity Creator"
+        }
+        $uForm.Controls.Add($btnTC)
+        $btnTCRuta = Nuevo-BotonRuta 194 {
+            $r = Seleccionar-Archivo (Obtener-Texto "TituloSelTrinity" "Seleccionar Trinity Creator (.exe)")
+            if ($r) {
+                $Global:TrinityCreatorExe = $r
+                Guardar-Configuracion
+                $img = Obtener-IconoEjecutable $r 28
+                if ($img) { $btnTC.Image = $img }
+            }
+        }
+        $uForm.Controls.Add($btnTCRuta)
+
+        # --- HeidiSQL ---
+        $lblDescHeidi = New-Object System.Windows.Forms.Label
+        $lblDescHeidi.Text = (Obtener-Texto "DescHeidi" "Gestor MySQL: consultar, editar y administrar las bases auth, characters y world.")
+        $lblDescHeidi.Location = New-Object System.Drawing.Point(30, 256)
+        $lblDescHeidi.Size = New-Object System.Drawing.Size(500, 22)
+        $lblDescHeidi.Font = $fDesc
+        $lblDescHeidi.ForeColor = [System.Drawing.Color]::FromArgb(160, 210, 170)
+        $uForm.Controls.Add($lblDescHeidi)
+
+        $btnHeidi = Nuevo-BotonUtil (Obtener-Texto "BtnHeidi" "HeidiSQL") 280 ([System.Drawing.Color]::FromArgb(40, 90, 60)) $Global:HeidiExe {
+            Lanzar-EjecutableUtilidad $Global:HeidiExe "HeidiSQL"
+        }
+        $uForm.Controls.Add($btnHeidi)
+        $btnHeidiRuta = Nuevo-BotonRuta 280 {
+            $r = Seleccionar-Archivo (Obtener-Texto "TituloSelHeidi" "Seleccionar HeidiSQL (.exe)")
+            if ($r) {
+                $Global:HeidiExe = $r
+                Guardar-Configuracion
+                $img = Obtener-IconoEjecutable $r 28
+                if ($img) { $btnHeidi.Image = $img }
+            }
+        }
+        $uForm.Controls.Add($btnHeidiRuta)
+
+        [void]$uForm.ShowDialog()
+        $uForm.Dispose()
+    }
+
     $script:BtnLatConfig = Crear-BotonLateral "Rutas / Config" 42 "config" $ColorAcento { Abrir-MenuConfig }
     $script:BtnLatCuentas = Crear-BotonLateral "Cuentas" 90 "cuentas" $ColorAcento { Abrir-PanelCuentas $form }
     $script:BtnLatArmeria = Crear-BotonLateral "Armeria" 138 "armeria" $ColorAcento {
@@ -702,11 +1009,12 @@ try {
     $script:BtnLatDesc = Crear-BotonLateral "Descargas" 234 "descargas" $ColorAcento { Abrir-PanelDescargas $form }
     $script:BtnLatBots = Crear-BotonLateral "NPCBots" 282 "npcbots" $ColorAcento { Abrir-MenuNPCBots }
     $script:BtnLatMods = Crear-BotonLateral "Mods" 330 "mods" $ColorAcento {
-        if ($Global:ModsDir -and (Test-Path $Global:ModsDir)) {
+        if (Get-Command Abrir-PanelMods -ErrorAction SilentlyContinue) {
+            Abrir-PanelMods $form
+        } elseif ($Global:ModsDir -and (Test-Path $Global:ModsDir)) {
             Start-Process explorer.exe $Global:ModsDir
         } else {
-            [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgModsNoExiste" "La carpeta de mods no existe. Configura rutas."), "Mods", 'OK', 'Error')
-            $Global:ModsDir = ""
+            [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgModsNoExiste" "No se cargo mods.ps1 y no hay carpeta de mods configurada."), "Mods", 'OK', 'Error')
         }
     }
     $script:BtnLatReino = Crear-BotonLateral "Reino" 378 "reino" $ColorAcento {
@@ -715,6 +1023,14 @@ try {
         } else {
             [System.Windows.Forms.MessageBox]::Show((Obtener-Texto "MsgReinoNoModulo" "No se encontro realm.ps1 en la carpeta Scripts."), (Obtener-Texto "TituloReino" "Reino"), 'OK', 'Error')
         }
+    }
+
+    $script:BtnLatCache = Crear-BotonLateral "Borrar cache" 426 "limpiar" ([System.Drawing.Color]::FromArgb(180, 60, 60)) {
+        Borrar-CacheArmeriaCompleta
+    }
+
+    $script:BtnLatUtil = Crear-BotonLateral "Utilidades" 474 "utilidades" ([System.Drawing.Color]::FromArgb(50, 80, 100)) {
+        Abrir-PanelUtilidadesServidor
     }
 
     # --- Zona nucleo (derecha del lateral) ---
@@ -802,17 +1118,17 @@ try {
 
     $btnStartAll = Crear-Boton "" ($OX + 10) 275 ([System.Drawing.Color]::DarkGreen) { Iniciar-Todo }
     $btnStartAll.Size = New-Object System.Drawing.Size(200, 32)
-    $btnStartAll.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+    $btnStartAll.Font = New-Object System.Drawing.Font("Georgia", 9.5, [System.Drawing.FontStyle]::Bold)
 
     $btnStopAll = Crear-Boton "" ($OX + 230) 275 ([System.Drawing.Color]::Firebrick) { Apagar-Todo }
     $btnStopAll.Size = New-Object System.Drawing.Size(210, 32)
-    $btnStopAll.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+    $btnStopAll.Font = New-Object System.Drawing.Font("Georgia", 9.5, [System.Drawing.FontStyle]::Bold)
 
     # Estado + barra bajo World of Warcraft: anchos alineados con la columna Offline (OX+130)
     $lblStatus = New-Object System.Windows.Forms.Label
     $lblStatus.Location = New-Object System.Drawing.Point(($OX + 10), 205)
     $lblStatus.Size = New-Object System.Drawing.Size(200, 14)
-    $lblStatus.Font = New-Object System.Drawing.Font("Segoe UI", 7.5)
+    $lblStatus.Font = New-Object System.Drawing.Font("Georgia", 7.5)
     $lblStatus.ForeColor = [System.Drawing.Color]::FromArgb(180, 180, 185)
     $form.Controls.Add($lblStatus)
 
@@ -884,7 +1200,7 @@ try {
     } else {
         $btnLangES.Text = "ES"
         $btnLangES.ForeColor = [System.Drawing.Color]::White
-        $btnLangES.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+        $btnLangES.Font = New-Object System.Drawing.Font("Georgia", 8, [System.Drawing.FontStyle]::Bold)
     }
     $tipIdioma.SetToolTip($btnLangES, "Espanol (ES)")
     $btnLangES.Add_Click({
@@ -912,7 +1228,7 @@ try {
     } else {
         $btnLangEN.Text = "EN"
         $btnLangEN.ForeColor = [System.Drawing.Color]::White
-        $btnLangEN.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+        $btnLangEN.Font = New-Object System.Drawing.Font("Georgia", 8, [System.Drawing.FontStyle]::Bold)
     }
     $tipIdioma.SetToolTip($btnLangEN, "English (EN)")
     $btnLangEN.Add_Click({
@@ -944,7 +1260,7 @@ try {
     $lblUptimeTitulo.Location = New-Object System.Drawing.Point(720, 225)
     $lblUptimeTitulo.Size = New-Object System.Drawing.Size(160, 18)
     $lblUptimeTitulo.TextAlign = 'MiddleCenter'
-    $lblUptimeTitulo.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+    $lblUptimeTitulo.Font = New-Object System.Drawing.Font("Georgia", 8.5, [System.Drawing.FontStyle]::Bold)
     $lblUptimeTitulo.ForeColor = $ColorAcentoSuave
     $form.Controls.Add($lblUptimeTitulo)
 
@@ -1016,7 +1332,7 @@ try {
         $b.FlatStyle = 'Flat'
         $b.FlatAppearance.BorderSize = 1
         $b.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(70, 70, 80)
-        $b.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+        $b.Font = New-Object System.Drawing.Font("Georgia", 8)
         $b.Cursor = [System.Windows.Forms.Cursors]::Hand
         $b.Tag = $filtro
         $b.Add_Click({
@@ -1039,7 +1355,7 @@ try {
     $lvPob.MultiSelect = $false
     $lvPob.BackColor = [System.Drawing.Color]::FromArgb(28, 28, 34)
     $lvPob.ForeColor = [System.Drawing.Color]::White
-    $lvPob.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lvPob.Font = New-Object System.Drawing.Font("Georgia", 9)
     $lvPob.HeaderStyle = "Nonclickable"
     [void]$lvPob.Columns.Add("Nombre", 120)
     [void]$lvPob.Columns.Add("Nivel", 40)
@@ -1077,7 +1393,7 @@ try {
     $lblPobHint.Text = "Doble clic = Armeria"
     $lblPobHint.Location = New-Object System.Drawing.Point(($OX + 10), 575)
     $lblPobHint.Size = New-Object System.Drawing.Size(160, 18)
-    $lblPobHint.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $lblPobHint.Font = New-Object System.Drawing.Font("Georgia", 8)
     $lblPobHint.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 150)
     $form.Controls.Add($lblPobHint)
 
@@ -1336,6 +1652,8 @@ try {
             if ($script:BtnLatBots)    { $script:BtnLatBots.Text    = "  NPCBots" }
             if ($script:BtnLatMods)    { $script:BtnLatMods.Text    = "  " + (Obtener-Texto "BtnMods" "Mods") }
             if ($script:BtnLatReino)   { $script:BtnLatReino.Text   = "  " + (Obtener-Texto "BtnReino" "Reino") }
+            if ($script:BtnLatCache)  { $script:BtnLatCache.Text  = "  " + (Obtener-Texto "BtnBorrarCacheArmeria" "Borrar cache") }
+            if ($script:BtnLatUtil)   { $script:BtnLatUtil.Text   = "  " + (Obtener-Texto "BtnUtilidades" "Utilidades") }
             if ($lblPobTitulo) { $lblPobTitulo.Text = Obtener-Texto "LblPoblacion" "Poblacion del reino" }
             if ($btnPobRefresh) { $btnPobRefresh.Text = Obtener-Texto "BtnActualizarPob" "Actualizar" }
             if ($lblPobHint) { $lblPobHint.Text = Obtener-Texto "HintPoblacionArmeria" "Doble clic = abrir Armeria" }
@@ -1590,7 +1908,7 @@ try {
             $btnCerrarDespedida.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 40)
             $btnCerrarDespedida.ForeColor = [System.Drawing.Color]::White
             $btnCerrarDespedida.FlatStyle = 'Flat'
-            $btnCerrarDespedida.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+            $btnCerrarDespedida.Font = New-Object System.Drawing.Font("Georgia", 9, [System.Drawing.FontStyle]::Bold)
             $btnCerrarDespedida.Add_Click({ $despedida.Close() }.GetNewClosure())
             $despedida.Controls.Add($btnCerrarDespedida)
 
@@ -1619,7 +1937,7 @@ try {
                 $lbl.AutoSize = $true
                 $lbl.BackColor = [System.Drawing.Color]::Transparent
                 $lbl.ForeColor = [System.Drawing.Color]::White
-                $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+                $lbl.Font = New-Object System.Drawing.Font("Georgia", 10, [System.Drawing.FontStyle]::Bold)
                 $lbl.Cursor = [System.Windows.Forms.Cursors]::Hand
                 $lbl.Add_Click({ Start-Process $url }.GetNewClosure())
                 $despedida.Controls.Add($lbl)
