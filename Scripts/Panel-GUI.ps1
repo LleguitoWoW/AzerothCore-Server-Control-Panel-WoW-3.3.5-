@@ -506,7 +506,7 @@ try {
     # DISEÑO DE LA INTERFAZ (v2 - nucleo + lateral)
     # ==========================================
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Panel de Control - Lleguito"
+    $form.Text = "Panel de Control v1.4 - Lleguito"
     $form.Size = New-Object System.Drawing.Size(920, 730)
     $form.StartPosition = 'CenterScreen'
     $form.BackColor = [System.Drawing.Color]::FromArgb(22, 22, 26)
