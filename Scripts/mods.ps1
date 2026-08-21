@@ -228,6 +228,116 @@ Function global:Mods-Alternar($rutaArchivo) {
     }
 }
 
+Function global:Mods-RellenarPanelLista {
+    param($panel, $lblDir, $fPeq, $fBold)
+
+    if (-not $panel) { return }
+    try { $panel.Controls.Clear() } catch {}
+
+    $data = Mods-Listar
+    if ($data.Error) {
+        if ($lblDir) { $lblDir.Text = $data.Error }
+        $lbl = New-Object System.Windows.Forms.Label
+        $lbl.Text = $data.Error
+        $lbl.Location = New-Object System.Drawing.Point(12, 12)
+        $lbl.Size = New-Object System.Drawing.Size(620, 60)
+        $lbl.ForeColor = [System.Drawing.Color]::FromArgb(255, 150, 100)
+        $lbl.Font = $fPeq
+        $panel.Controls.Add($lbl)
+        return
+    }
+    if ($lblDir) {
+        $lblDir.Text = (Obtener-Texto "LblModsCarpeta" "Carpeta:") + " " + $data.Dir
+    }
+
+    $y = 8
+    foreach ($m in $data.Mods) {
+        $row = New-Object System.Windows.Forms.Panel
+        $row.Location = New-Object System.Drawing.Point(8, $y)
+        $row.Size = New-Object System.Drawing.Size(640, 44)
+        $row.BackColor = [System.Drawing.Color]::FromArgb(30, 28, 26)
+
+        $lblN = New-Object System.Windows.Forms.Label
+        $lblN.Text = $m.Nombre
+        $lblN.Location = New-Object System.Drawing.Point(10, 6)
+        $lblN.Size = New-Object System.Drawing.Size(280, 18)
+        $lblN.Font = $fBold
+        $lblN.ForeColor = [System.Drawing.Color]::White
+        $row.Controls.Add($lblN)
+
+        $lblK = New-Object System.Windows.Forms.Label
+        if ($m.TieneEnable) {
+            $lblK.Text = "$($m.Clave) = $($m.Valor)"
+        } else {
+            $lblK.Text = (Obtener-Texto "MsgModsSinClave" "Sin @PANEL_TOGGLE / Enable detectado")
+        }
+        $lblK.Location = New-Object System.Drawing.Point(10, 24)
+        $lblK.Size = New-Object System.Drawing.Size(360, 16)
+        $lblK.Font = New-Object System.Drawing.Font("Georgia", 7.5)
+        $lblK.ForeColor = [System.Drawing.Color]::FromArgb(160, 150, 140)
+        $row.Controls.Add($lblK)
+
+        $btn = New-Object System.Windows.Forms.Button
+        $btn.Size = New-Object System.Drawing.Size(110, 32)
+        $btn.Location = New-Object System.Drawing.Point(510, 6)
+        $btn.FlatStyle = "Flat"
+        $btn.Font = $fBold
+        $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
+        $btn.Tag = $m.Ruta
+
+        if (-not $m.TieneEnable) {
+            $btn.Text = "—"
+            $btn.Enabled = $false
+            $btn.BackColor = [System.Drawing.Color]::FromArgb(50, 50, 50)
+            $btn.ForeColor = [System.Drawing.Color]::Gray
+        } elseif ($m.Activo) {
+            $btn.Text = (Obtener-Texto "BtnModOn" "ON")
+            $btn.BackColor = [System.Drawing.Color]::FromArgb(30, 120, 60)
+            $btn.ForeColor = [System.Drawing.Color]::White
+        } else {
+            $btn.Text = (Obtener-Texto "BtnModOff" "OFF")
+            $btn.BackColor = [System.Drawing.Color]::FromArgb(120, 40, 40)
+            $btn.ForeColor = [System.Drawing.Color]::White
+        }
+
+        $btn.Add_Click({
+            try {
+                $ruta = [string]$this.Tag
+                $res = Mods-Alternar $ruta
+                if (-not $res.Ok) {
+                    [System.Windows.Forms.MessageBox]::Show(
+                        $res.Msg,
+                        (Obtener-Texto "TituloMods" "Mods del servidor"),
+                        "OK", "Warning")
+                    return
+                }
+                if ($script:ModsPanelLista -and $script:ModsLblDir) {
+                    Mods-RellenarPanelLista $script:ModsPanelLista $script:ModsLblDir $script:ModsFontPeq $script:ModsFontBold
+                }
+            } catch {
+                [System.Windows.Forms.MessageBox]::Show(
+                    $_.Exception.Message,
+                    (Obtener-Texto "TituloMods" "Mods del servidor"),
+                    "OK", "Error")
+            }
+        })
+
+        $row.Controls.Add($btn)
+        $panel.Controls.Add($row)
+        $y += 50
+    }
+
+    if ($data.Mods.Count -eq 0) {
+        $lbl = New-Object System.Windows.Forms.Label
+        $lbl.Text = (Obtener-Texto "MsgModsVacio" "No hay archivos .conf en la carpeta de modules.")
+        $lbl.Location = New-Object System.Drawing.Point(12, 12)
+        $lbl.Size = New-Object System.Drawing.Size(600, 40)
+        $lbl.ForeColor = [System.Drawing.Color]::FromArgb(200, 180, 120)
+        $lbl.Font = $fPeq
+        $panel.Controls.Add($lbl)
+    }
+}
+
 Function global:Abrir-PanelMods {
     param($formPadre)
 
@@ -260,15 +370,32 @@ Function global:Abrir-PanelMods {
     $lblInfo.Size = New-Object System.Drawing.Size(680, 36)
     $lblInfo.Font = $fPeq
     $lblInfo.ForeColor = [System.Drawing.Color]::FromArgb(200, 190, 160)
-    $lblInfo.Text = (Obtener-Texto "MsgModsInfo" "Marca en cada conf la linea con # @PANEL_TOGGLE (justo encima del Enable). ON/OFF respeta 0/1 o true/false. Reinicia worldserver.")
+    $lblInfo.Text = (Obtener-Texto "MsgModsInfo" "En cada conf pon # @PANEL_TOGGLE encima de la linea Enable. El boton respeta 0/1 o true/false. Reinicia el worldserver.")
     $mf.Controls.Add($lblInfo)
 
     $lblDir = New-Object System.Windows.Forms.Label
     $lblDir.Location = New-Object System.Drawing.Point(16, 78)
-    $lblDir.Size = New-Object System.Drawing.Size(540, 18)
+    $lblDir.Size = New-Object System.Drawing.Size(390, 18)
     $lblDir.Font = New-Object System.Drawing.Font("Georgia", 7.5)
     $lblDir.ForeColor = [System.Drawing.Color]::FromArgb(150, 140, 130)
     $mf.Controls.Add($lblDir)
+
+    $btnAyuda = New-Object System.Windows.Forms.Button
+    $btnAyuda.Text = (Obtener-Texto "BtnAnadirMods" "Anadir mods")
+    $btnAyuda.Location = New-Object System.Drawing.Point(420, 72)
+    $btnAyuda.Size = New-Object System.Drawing.Size(130, 28)
+    $btnAyuda.FlatStyle = "Flat"
+    $btnAyuda.BackColor = [System.Drawing.Color]::FromArgb(40, 70, 100)
+    $btnAyuda.ForeColor = [System.Drawing.Color]::White
+    $btnAyuda.Font = $fPeq
+    $btnAyuda.Add_Click({
+        $msg = Obtener-Texto "MsgAnadirModsAyuda" "COMO ANADIR UN MOD AL GESTOR`n`n1) Instala el mod.`n2) Abre configs\modules\Nombre.conf`n3) Encima del Enable escribe:`n   # @PANEL_TOGGLE`n4) Guarda y pulsa Actualizar."
+        [System.Windows.Forms.MessageBox]::Show(
+            $msg,
+            (Obtener-Texto "BtnAnadirMods" "Anadir mods"),
+            "OK", "Information")
+    })
+    $mf.Controls.Add($btnAyuda)
 
     $btnRefresh = New-Object System.Windows.Forms.Button
     $btnRefresh.Text = (Obtener-Texto "BtnActualizar" "Actualizar")
@@ -287,100 +414,20 @@ Function global:Abrir-PanelMods {
     $panel.BackColor = [System.Drawing.Color]::FromArgb(22, 20, 18)
     $mf.Controls.Add($panel)
 
-    Function Rellenar-ListaMods {
-        $panel.Controls.Clear()
-        $data = Mods-Listar
-        if ($data.Error) {
-            $lblDir.Text = $data.Error
-            $lbl = New-Object System.Windows.Forms.Label
-            $lbl.Text = $data.Error
-            $lbl.Location = New-Object System.Drawing.Point(12, 12)
-            $lbl.Size = New-Object System.Drawing.Size(620, 60)
-            $lbl.ForeColor = [System.Drawing.Color]::FromArgb(255, 150, 100)
-            $lbl.Font = $fPeq
-            $panel.Controls.Add($lbl)
-            return
+    $script:ModsPanelLista = $panel
+    $script:ModsLblDir = $lblDir
+    $script:ModsFontPeq = $fPeq
+    $script:ModsFontBold = $fBold
+
+    $btnRefresh.Add_Click({
+        try {
+            Mods-RellenarPanelLista $script:ModsPanelLista $script:ModsLblDir $script:ModsFontPeq $script:ModsFontBold
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Mods", "OK", "Error")
         }
-        $lblDir.Text = (Obtener-Texto "LblModsCarpeta" "Carpeta:") + " " + $data.Dir
+    })
 
-        $y = 8
-        foreach ($m in $data.Mods) {
-            $row = New-Object System.Windows.Forms.Panel
-            $row.Location = New-Object System.Drawing.Point(8, $y)
-            $row.Size = New-Object System.Drawing.Size(640, 44)
-            $row.BackColor = [System.Drawing.Color]::FromArgb(30, 28, 26)
-
-            $lblN = New-Object System.Windows.Forms.Label
-            $lblN.Text = $m.Nombre
-            $lblN.Location = New-Object System.Drawing.Point(10, 6)
-            $lblN.Size = New-Object System.Drawing.Size(280, 18)
-            $lblN.Font = $fBold
-            $lblN.ForeColor = [System.Drawing.Color]::White
-            $row.Controls.Add($lblN)
-
-            $lblK = New-Object System.Windows.Forms.Label
-            if ($m.TieneEnable) {
-                $lblK.Text = "$($m.Clave) = $($m.Valor)"
-            } else {
-                $lblK.Text = (Obtener-Texto "MsgModsSinClave" "Sin clave Enable detectada")
-            }
-            $lblK.Location = New-Object System.Drawing.Point(10, 24)
-            $lblK.Size = New-Object System.Drawing.Size(360, 16)
-            $lblK.Font = New-Object System.Drawing.Font("Georgia", 7.5)
-            $lblK.ForeColor = [System.Drawing.Color]::FromArgb(160, 150, 140)
-            $row.Controls.Add($lblK)
-
-            $btn = New-Object System.Windows.Forms.Button
-            $btn.Size = New-Object System.Drawing.Size(110, 32)
-            $btn.Location = New-Object System.Drawing.Point(510, 6)
-            $btn.FlatStyle = "Flat"
-            $btn.Font = $fBold
-            $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
-            $btn.Tag = $m.Ruta
-
-            if (-not $m.TieneEnable) {
-                $btn.Text = "—"
-                $btn.Enabled = $false
-                $btn.BackColor = [System.Drawing.Color]::FromArgb(50, 50, 50)
-                $btn.ForeColor = [System.Drawing.Color]::Gray
-            } elseif ($m.Activo) {
-                $btn.Text = (Obtener-Texto "BtnModOn" "ON")
-                $btn.BackColor = [System.Drawing.Color]::FromArgb(30, 120, 60)
-                $btn.ForeColor = [System.Drawing.Color]::White
-            } else {
-                $btn.Text = (Obtener-Texto "BtnModOff" "OFF")
-                $btn.BackColor = [System.Drawing.Color]::FromArgb(120, 40, 40)
-                $btn.ForeColor = [System.Drawing.Color]::White
-            }
-
-            $btn.Add_Click({
-                $ruta = [string]$this.Tag
-                $res = Mods-Alternar $ruta
-                if (-not $res.Ok) {
-                    [System.Windows.Forms.MessageBox]::Show($res.Msg, (Obtener-Texto "TituloMods" "Mods"), "OK", "Warning")
-                    return
-                }
-                Rellenar-ListaMods
-            }.GetNewClosure())
-
-            $row.Controls.Add($btn)
-            $panel.Controls.Add($row)
-            $y += 50
-        }
-
-        if ($data.Mods.Count -eq 0) {
-            $lbl = New-Object System.Windows.Forms.Label
-            $lbl.Text = (Obtener-Texto "MsgModsVacio" "No hay archivos .conf en la carpeta de modules.")
-            $lbl.Location = New-Object System.Drawing.Point(12, 12)
-            $lbl.Size = New-Object System.Drawing.Size(600, 40)
-            $lbl.ForeColor = [System.Drawing.Color]::FromArgb(200, 180, 120)
-            $lbl.Font = $fPeq
-            $panel.Controls.Add($lbl)
-        }
-    }
-
-    $btnRefresh.Add_Click({ Rellenar-ListaMods })
-    Rellenar-ListaMods
+    Mods-RellenarPanelLista $panel $lblDir $fPeq $fBold
 
     [void]$mf.ShowDialog($formPadre)
     $mf.Dispose()
