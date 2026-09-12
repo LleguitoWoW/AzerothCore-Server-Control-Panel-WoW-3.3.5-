@@ -215,7 +215,9 @@ Function global:Mods-Alternar($rutaArchivo) {
         if (-not (Test-Path -LiteralPath $bak)) {
             Copy-Item -LiteralPath $rutaArchivo -Destination $bak -Force
         }
-        Set-Content -LiteralPath $rutaArchivo -Value $lineas -Encoding UTF8
+        # Guardar sin BOM (compatible con PowerShell 5.1)
+        $utf8NoBOM = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllLines($rutaArchivo, $lineas, $utf8NoBOM)
         return @{
             Ok     = $true
             Activo = $nuevoActivo
