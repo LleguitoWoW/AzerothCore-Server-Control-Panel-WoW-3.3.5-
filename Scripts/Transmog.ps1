@@ -695,6 +695,49 @@ Function global:Mostrar-VentanaTransmog {
         $panelDoll.BorderStyle = "FixedSingle"
         [void]$tmForm.Controls.Add($panelDoll)
 
+        # === DRESSME SYNC: icono check + aviso (codigo nuevo, sin boton) ===
+        $dmCheckSize = 36
+        $dmX = [int](($panelDoll.Width - $dmCheckSize) / 2)
+        $dmY = [int](($panelDoll.Height - 70) / 2)
+
+        $lblDressMeCheck = New-Object System.Windows.Forms.Label
+        $lblDressMeCheck.Text = [char]0x2714   # check ✓
+        $lblDressMeCheck.Size = New-Object System.Drawing.Size $dmCheckSize, $dmCheckSize
+        $lblDressMeCheck.Location = New-Object System.Drawing.Point $dmX, $dmY
+        $lblDressMeCheck.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
+        $lblDressMeCheck.ForeColor = [System.Drawing.Color]::FromArgb(80, 200, 100)
+        $lblDressMeCheck.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+        $lblDressMeCheck.BackColor = [System.Drawing.Color]::Transparent
+        try {
+            $tipDm = New-Object System.Windows.Forms.ToolTip
+            $tipDm.SetToolTip($lblDressMeCheck, "Los items desbloqueados se exportan automaticamente al addon DressMe al cargar el personaje en la Armeria.`n`nRequiere el addon DressMe MODIFICADO para servidores privados.`nClic derecho: configurar ruta del addon.")
+        } catch {}
+        # Clic derecho = configurar ruta (por si hace falta)
+        $lblDressMeCheck.Add_MouseUp({
+            if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Right) {
+                if (Get-Command DressMe-ConfigurarRuta -ErrorAction SilentlyContinue) {
+                    DressMe-ConfigurarRuta
+                }
+            }
+        })
+        [void]$panelDoll.Controls.Add($lblDressMeCheck)
+
+        $lblDressMeAviso = New-Object System.Windows.Forms.Label
+        $lblDressMeAviso.Text = "Todos los items ya estan exportados al addon`nRequiere DressMe modificado (servidores privados)"
+        $lblDressMeAviso.Size = New-Object System.Drawing.Size(280, 36)
+        $dmLblX = [int](($panelDoll.Width - 280) / 2)
+        $dmLblY = $dmY + $dmCheckSize + 4
+        $lblDressMeAviso.Location = New-Object System.Drawing.Point $dmLblX, $dmLblY
+        $lblDressMeAviso.ForeColor = [System.Drawing.Color]::FromArgb(160, 200, 160)
+        $lblDressMeAviso.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+        $lblDressMeAviso.TextAlign = [System.Drawing.ContentAlignment]::TopCenter
+        $lblDressMeAviso.BackColor = [System.Drawing.Color]::Transparent
+        [void]$panelDoll.Controls.Add($lblDressMeAviso)
+
+        # Compatibilidad: variable que el handler antiguo podia usar (ya no hay boton)
+        $btnDressMeSync = $lblDressMeCheck
+        # === FIN DRESSME SYNC UI ===
+
         $lblActivos = New-Object System.Windows.Forms.Label
         $lblActivos.Location = New-Object System.Drawing.Point(12, 732)
         $lblActivos.Size = New-Object System.Drawing.Size(470, 24)
@@ -951,6 +994,17 @@ Function global:Mostrar-VentanaTransmog {
                 [System.Windows.Forms.MessageBox]::Show("Error filtro: $($_.Exception.Message)", "Transmog", "OK", "Error")
             }
         })
+
+        # === DRESSME SYNC handler: clic izquierdo en el check = re-sync manual (opcional) ===
+        $script:TmBtnDressMe = $btnDressMeSync
+        if ($btnDressMeSync) {
+            $btnDressMeSync.Add_Click({
+                if (Get-Command DressMe-SincronizarDesdeTransmog -ErrorAction SilentlyContinue) {
+                    DressMe-SincronizarDesdeTransmog
+                }
+            })
+        }
+        # === FIN DRESSME handler ===
         $txtFiltro.Add_KeyDown({
             if ($_.KeyCode -eq "Enter") {
                 try { Transmog-RellenarLista $script:TmLv $script:TmLbl $script:TmItems $script:TmTxt.Text $script:TmAcc } catch {}

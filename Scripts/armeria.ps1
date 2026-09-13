@@ -3452,6 +3452,15 @@ Function Abrir-PanelArmeria($formPadre, $nombreInicial = $null) {
             $btnTransmog.Enabled = $true
             $btnEstablos.Enabled = $true
 
+            # === DRESSME AUTO-SYNC (codigo nuevo) ===
+            # Al cargar personaje en Armeria, genera UnlockedAppearances.lua sin pedir clic
+            try {
+                if (Get-Command DressMe-AutoDesdeArmeria -ErrorAction SilentlyContinue) {
+                    DressMe-AutoDesdeArmeria -GuidChar ([int]$guid)
+                }
+            } catch {}
+            # === FIN DRESSME AUTO-SYNC ===
+
             $panelProf.Controls.Clear()
             $profsRaw = Consulta-Armeria "SELECT CONCAT(skill,'|',value,'|',max) FROM character_skills WHERE guid=$guid AND skill IN (164,165,171,182,185,186,197,202,333,393,755,773,129,356) ORDER BY skill;" "acore_characters"
 

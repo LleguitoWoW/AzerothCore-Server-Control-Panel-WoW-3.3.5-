@@ -69,6 +69,7 @@ try {
     $RatesScript = Join-Path $Global:RootDir "rates.ps1"
     $ArmeriaScript = Join-Path $Global:RootDir "armeria.ps1"
     $TransmogScript = Join-Path $Global:RootDir "Transmog.ps1"
+    $DressMeSyncScript = Join-Path $Global:RootDir "DressMeSync.ps1"  # NUEVO DressMe
     $EstablosScript = Join-Path $Global:RootDir "Establos.ps1"
     $RealmScript = Join-Path $Global:RootDir "realm.ps1"
     $ModsGestionScript = Join-Path $Global:RootDir "mods.ps1"
@@ -140,7 +141,21 @@ try {
     }
 
     # Establos (monturas + mascotas de compania)
-    if (Test-Path $EstablosScript) {
+        # --- NUEVO: DressMe Sync (no altera logica existente) ---
+    if (Test-Path $DressMeSyncScript) {
+        try {
+            $contenidoDressMe = Get-Content $DressMeSyncScript -Raw -Encoding UTF8
+            Invoke-Expression $contenidoDressMe
+            # Precargar ruta DRESSME_DB_PATH si existe
+            try { if (Get-Command DressMe-LeerRutaAddon -ErrorAction SilentlyContinue) { [void](DressMe-LeerRutaAddon) } } catch {}
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                "No se pudo cargar DressMeSync.ps1.`n`nError: $($_.Exception.Message)",
+                "DressMe", 'OK', 'Warning')
+        }
+    }
+
+if (Test-Path $EstablosScript) {
         try {
             $contenidoEstablos = Get-Content $EstablosScript -Raw -Encoding UTF8
             Invoke-Expression $contenidoEstablos
@@ -228,6 +243,7 @@ try {
     $Global:MysqlAdminUser = "root"
     $Global:MysqlAdminPass = ""
     $Global:CharDbName = "acore_characters"
+    $Global:DressMeDbPath = ""  # NUEVO: carpeta db del addon DressMe
     $Global:Idioma = "ES"
 
     Function Obtener-Texto($clave, $defecto) {
@@ -309,6 +325,7 @@ try {
                 if ($_ -match "^MYSQL_ADMIN_USER=(.*)") { $Global:MysqlAdminUser = $Matches[1] }
                 if ($_ -match "^MYSQL_ADMIN_PASS=(.*)") { $Global:MysqlAdminPass = $Matches[1] }
                 if ($_ -match "^CHAR_DB=(.*)") { $Global:CharDbName = $Matches[1] }
+                if ($_ -match "^DRESSME_DB_PATH=(.*)") { $Global:DressMeDbPath = $Matches[1].Trim() }  # NUEVO
                 if ($_ -match "^LANG=(.*)") { $Global:Idioma = $Matches[1] }
                 if ($_ -match "^KEIRA_EXE=(.*)") { $Global:KeiraExe = $Matches[1] }
                 if ($_ -match "^TRINITY_CREATOR_EXE=(.*)") { $Global:TrinityCreatorExe = $Matches[1] }
@@ -323,7 +340,7 @@ try {
     }
 
     Function Guardar-Configuracion {
-        $configContenido = "MYSQL_DIR=$($Global:MysqlDir)`nAUTH_DIR=$($Global:AuthDir)`nWORLD_DIR=$($Global:WorldDir)`nWOW_EXE=$($Global:WowExe)`nWORLDCONF_PATH=$($Global:WorldConfPath)`nMODS_DIR=$($Global:ModsDir)`nMYSQL_USER=$($Global:MysqlUser)`nMYSQL_PASS=$($Global:MysqlPass)`nMYSQL_ADMIN_USER=$($Global:MysqlAdminUser)`nMYSQL_ADMIN_PASS=$($Global:MysqlAdminPass)`nCHAR_DB=$($Global:CharDbName)`nLANG=$($Global:Idioma)`nKEIRA_EXE=$($Global:KeiraExe)`nTRINITY_CREATOR_EXE=$($Global:TrinityCreatorExe)`nHEIDI_EXE=$($Global:HeidiExe)"
+        $configContenido = "MYSQL_DIR=$($Global:MysqlDir)`nAUTH_DIR=$($Global:AuthDir)`nWORLD_DIR=$($Global:WorldDir)`nWOW_EXE=$($Global:WowExe)`nWORLDCONF_PATH=$($Global:WorldConfPath)`nMODS_DIR=$($Global:ModsDir)`nMYSQL_USER=$($Global:MysqlUser)`nMYSQL_PASS=$($Global:MysqlPass)`nMYSQL_ADMIN_USER=$($Global:MysqlAdminUser)`nMYSQL_ADMIN_PASS=$($Global:MysqlAdminPass)`nCHAR_DB=$($Global:CharDbName)`nDRESSME_DB_PATH=$($Global:DressMeDbPath)`nLANG=$($Global:Idioma)`nKEIRA_EXE=$($Global:KeiraExe)`nTRINITY_CREATOR_EXE=$($Global:TrinityCreatorExe)`nHEIDI_EXE=$($Global:HeidiExe)"
         $configContenido | Out-File -FilePath $ConfigFile -Encoding UTF8
     }
 
@@ -506,7 +523,7 @@ try {
     # DISEÑO DE LA INTERFAZ (v2 - nucleo + lateral)
     # ==========================================
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Panel de Control v1.4 - Lleguito"
+    $form.Text = "Azerothcore Control Panel"
     $form.Size = New-Object System.Drawing.Size(920, 730)
     $form.StartPosition = 'CenterScreen'
     $form.BackColor = [System.Drawing.Color]::FromArgb(22, 22, 26)
@@ -1703,20 +1720,31 @@ try {
             $luzAuth.Text = "Offline"; $luzAuth.ForeColor = [System.Drawing.Color]::Red 
         }
         
-        $procWorld = Get-Process -Name "worldserver" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($procWorld) { 
-            $luzWorld.Text = "Online"; $luzWorld.ForeColor = [System.Drawing.Color]::LimeGreen 
-
-            $tiempoActivo = (Get-Date) - $procWorld.StartTime
-            if ($tiempoActivo.TotalHours -ge 24) {
-                $lblWorldUptime.Text = "{0}d {1:D2}:{2:D2}:{3:D2}" -f [int]$tiempoActivo.Days, $tiempoActivo.Hours, $tiempoActivo.Minutes, $tiempoActivo.Seconds
-            } else {
-                $lblWorldUptime.Text = "{0:D2}:{1:D2}:{2:D2}" -f [int]$tiempoActivo.TotalHours, $tiempoActivo.Minutes, $tiempoActivo.Seconds
+        $procWorld = $null
+        try { $procWorld = Get-Process -Name "worldserver" -ErrorAction SilentlyContinue | Select-Object -First 1 } catch { $procWorld = $null }
+        if ($procWorld) {
+            $luzWorld.Text = "Online"; $luzWorld.ForeColor = [System.Drawing.Color]::LimeGreen
+            try {
+                $st = $null
+                try { $st = $procWorld.StartTime } catch { $st = $null }
+                if ($st -and ($st -is [datetime])) {
+                    $tiempoActivo = (Get-Date) - [datetime]$st
+                    if ($tiempoActivo.TotalHours -ge 24) {
+                        $lblWorldUptime.Text = "{0}d {1:D2}:{2:D2}:{3:D2}" -f [int]$tiempoActivo.Days, $tiempoActivo.Hours, $tiempoActivo.Minutes, $tiempoActivo.Seconds
+                    } else {
+                        $lblWorldUptime.Text = "{0:D2}:{1:D2}:{2:D2}" -f [int]$tiempoActivo.TotalHours, $tiempoActivo.Minutes, $tiempoActivo.Seconds
+                    }
+                    $lblWorldUptime.ForeColor = [System.Drawing.Color]::LimeGreen
+                } else {
+                    $lblWorldUptime.Text = "--:--:--"
+                    $lblWorldUptime.ForeColor = [System.Drawing.Color]::FromArgb(150, 150, 155)
+                }
+            } catch {
+                $lblWorldUptime.Text = "--:--:--"
+                $lblWorldUptime.ForeColor = [System.Drawing.Color]::FromArgb(150, 150, 155)
             }
-            $lblWorldUptime.ForeColor = [System.Drawing.Color]::LimeGreen
-        } else { 
-            $luzWorld.Text = "Offline"; $luzWorld.ForeColor = [System.Drawing.Color]::Red 
-
+        } else {
+            $luzWorld.Text = "Offline"; $luzWorld.ForeColor = [System.Drawing.Color]::Red
             $lblWorldUptime.Text = "--:--:--"
             $lblWorldUptime.ForeColor = [System.Drawing.Color]::FromArgb(150, 150, 155)
         }
@@ -1743,24 +1771,47 @@ try {
     }
 
     Function Stop-ProcesoSeguro($nombre, $maxWait) {
-        $nombreProceso = $nombre.Replace(".exe", "")
+        if (-not $nombre) { return }
+        $nombreProceso = ([string]$nombre).Replace(".exe", "").Trim()
+        if (-not $nombreProceso) { return }
+        $max = 30
+        try { if ($null -ne $maxWait) { $max = [int]$maxWait } } catch { $max = 30 }
+        if ($max -lt 1) { $max = 1 }
         $msgCtrlC = Obtener-Texto "CtrlC" "Enviando Ctrl+C a"
         $lblStatus.Text = "$msgCtrlC $nombreProceso..."
         [System.Windows.Forms.Application]::DoEvents()
 
-        if (Get-Process -Name $nombreProceso -ErrorAction SilentlyContinue) {
-            $argList = "-ExecutionPolicy Bypass -NoProfile -File `"$CtrlCScript`" -ProcessName $nombreProceso"
-            Start-Process "powershell.exe" -ArgumentList $argList -NoNewWindow -Wait
-            
-            $waited = 0
-            while ((Get-Process -Name $nombreProceso -ErrorAction SilentlyContinue) -and ($waited -lt ($maxWait * 2))) {
-                Start-Sleep -Milliseconds 500
-                $waited++
-                [System.Windows.Forms.Application]::DoEvents()
+        try {
+            if (Get-Process -Name $nombreProceso -ErrorAction SilentlyContinue) {
+                if ($CtrlCScript -and (Test-Path -LiteralPath $CtrlCScript)) {
+                    $argList = "-ExecutionPolicy Bypass -NoProfile -File `"$CtrlCScript`" -ProcessName $nombreProceso"
+                    Start-Process "powershell.exe" -ArgumentList $argList -NoNewWindow -Wait
+                } else {
+                    Stop-Process -Name $nombreProceso -Force -ErrorAction SilentlyContinue
+                }
+
+                $waited = 0
+                $limite = $max * 2
+                while ($waited -lt $limite) {
+                    $sigue = $false
+                    try { if (Get-Process -Name $nombreProceso -ErrorAction SilentlyContinue) { $sigue = $true } } catch {}
+                    if (-not $sigue) { break }
+                    Start-Sleep -Milliseconds 500
+                    $waited++
+                    try { [System.Windows.Forms.Application]::DoEvents() } catch {}
+                }
+                # Si sigue vivo tras esperar, forzar
+                try {
+                    if (Get-Process -Name $nombreProceso -ErrorAction SilentlyContinue) {
+                        Stop-Process -Name $nombreProceso -Force -ErrorAction SilentlyContinue
+                    }
+                } catch {}
             }
+        } catch {
+            try { Stop-Process -Name $nombreProceso -Force -ErrorAction SilentlyContinue } catch {}
         }
         $lblStatus.Text = Obtener-Texto "Listo" "Listo."
-        [System.Windows.Forms.Application]::DoEvents()
+        try { [System.Windows.Forms.Application]::DoEvents() } catch {}
     }
 
     Function Stop-ProcesoMySQL {
