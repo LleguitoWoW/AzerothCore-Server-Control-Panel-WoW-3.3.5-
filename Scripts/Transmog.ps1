@@ -723,7 +723,7 @@ Function global:Mostrar-VentanaTransmog {
         [void]$panelDoll.Controls.Add($lblDressMeCheck)
 
         $lblDressMeAviso = New-Object System.Windows.Forms.Label
-        $lblDressMeAviso.Text = "Todos los items ya estan exportados al addon`nRequiere DressMe modificado (servidores privados)"
+        $lblDressMeAviso.Text = "Desbloqueos en juego: Transmog AzerothCore`n(TRANSMOG_SYNC / TransmogTip — sin export .lua)"
         $lblDressMeAviso.Size = New-Object System.Drawing.Size(280, 36)
         $dmLblX = [int](($panelDoll.Width - 280) / 2)
         $dmLblY = $dmY + $dmCheckSize + 4

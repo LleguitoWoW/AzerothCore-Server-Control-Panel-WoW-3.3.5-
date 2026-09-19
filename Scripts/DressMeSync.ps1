@@ -8,16 +8,18 @@ try { Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue 
 try { Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue } catch {}
 
 # ============================================================
-# Configuracion DressMe auto
+# Configuracion export Lua (DESACTIVADO por defecto)
+# Transmog AzerothCore usa TRANSMOG_SYNC / TransmogTip; no necesita .lua
 # ============================================================
+# $true = vuelve a generar UnlockedAppearances.lua (Armeria/timer/manual)
+$Global:DressMeAutoEnabled = $false
+
 # Prefijos de cuentas playerbots que NO deben generar el lua
 if (-not $Global:DressMeBotPrefixes) {
     $Global:DressMeBotPrefixes = @("rnb", "rnd", "rndbot", "playerbot", "bot")
 }
 # Intervalo del timer en minutos (0 = desactivado)
-if ($null -eq $Global:DressMeTimerMinutes) {
-    $Global:DressMeTimerMinutes = 5
-}
+$Global:DressMeTimerMinutes = 0
 
 
 
@@ -209,6 +211,8 @@ Function global:DressMe-GenerarYCopiar {
         [Parameter(Mandatory=$true)][int]$AccountId,
         [string]$DbFolder = $null
     )
+    # Guard global: si auto desactivado, no escribir lua
+    if (-not $Global:DressMeAutoEnabled) { return $false }
 
     if ($AccountId -le 0) {
         throw "AccountId invalido"
@@ -284,6 +288,14 @@ Function global:DressMe-GenerarYCopiar {
 
 Function global:DressMe-SincronizarDesdeTransmog {
     # Llamado por el boton/check de la ventana Transmog
+    if (-not $Global:DressMeAutoEnabled) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "El export de UnlockedAppearances.lua esta desactivado.`n`nEl addon Transmog AzerothCore obtiene los desbloqueos por TRANSMOG_SYNC / TransmogTip (sin generar .lua).`n`nPara reactivar el export: `$Global:DressMeAutoEnabled = `$true",
+            "Transmog AzerothCore",
+            "OK",
+            "Information")
+        return
+    }
     try {
         $acc = 0
         if ($script:TmAcc) { try { $acc = [int]$script:TmAcc } catch {} }
@@ -329,6 +341,7 @@ Function global:DressMe-SincronizarSilencioso {
         [int]$GuidChar = 0,
         [switch]$MostrarAviso
     )
+    if (-not $Global:DressMeAutoEnabled) { return $false }
     try {
         $username = $null
         if ($AccountId -le 0 -and $GuidChar -gt 0) {
@@ -369,6 +382,8 @@ Function global:DressMe-SincronizarSilencioso {
 
 Function global:DressMe-AutoDesdeArmeria {
     param([int]$GuidChar)
+    # Auto-export desactivado: Transmog AzerothCore usa TRANSMOG_SYNC / TransmogTip
+    if (-not $Global:DressMeAutoEnabled) { return }
     try {
         if ($GuidChar -le 0) { return }
         $ahora = Get-Date
@@ -418,6 +433,7 @@ ORDER BY n DESC;
 
 Function global:DressMe-TickTimer {
     try {
+        if (-not $Global:DressMeAutoEnabled) { return }
         $ruta = DressMe-LeerRutaAddon
         if (-not $ruta -or -not (Test-Path -LiteralPath $ruta)) { return }
         $acc = DressMe-ElegirCuentaParaTimer
@@ -428,9 +444,13 @@ Function global:DressMe-TickTimer {
 
 Function global:DressMe-IniciarTimerAuto {
     try {
-        $mins = 5
+        if (-not $Global:DressMeAutoEnabled) {
+            DressMe-DetenerTimerAuto
+            return
+        }
+        $mins = 0
         if ($null -ne $Global:DressMeTimerMinutes) {
-            try { $mins = [int]$Global:DressMeTimerMinutes } catch { $mins = 5 }
+            try { $mins = [int]$Global:DressMeTimerMinutes } catch { $mins = 0 }
         }
         if ($mins -le 0) {
             DressMe-DetenerTimerAuto
