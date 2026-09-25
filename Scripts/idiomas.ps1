@@ -158,7 +158,7 @@ NOTAS:
         "MsgNoGuildDumps"         = "No se encontraron backups de hermandad en esa carpeta."
 
         # MÓDULO DE DESCARGA DEL CLIENTE HD (NUEVO)
-        "BtnDescargarHD"    = "Descargar Cliente HD y Servidor"
+        "BtnDescargarHD"    = "Descargas"
         "BtnCredencialesMysql"   = "Credenciales de MySQL (usuario / contrasena)"
         "BtnMods"                = "Mods"
         "TituloSeleccionarMods"  = "Selecciona la carpeta de Mods"
@@ -631,7 +631,7 @@ NOTES:
         "MsgNoGuildDumps"         = "No guild backups were found in that folder."
 
         # HD CLIENT DOWNLOAD MODULE (NEW)
-        "BtnDescargarHD"    = "Download HD Client and Server"
+        "BtnDescargarHD"    = "Downloads"
         "BtnCredencialesMysql"   = "MySQL Credentials (username / password)"
         "BtnMods"                = "Mods"
         "TituloSeleccionarMods"  = "Select the Mods folder"

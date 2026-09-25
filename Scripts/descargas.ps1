@@ -74,7 +74,7 @@ Function Abrir-PanelDescargas($parentForm) {
     $linkServidor.ActiveLinkColor = [System.Drawing.Color]::Gold
     $linkServidor.VisitedLinkColor = [System.Drawing.Color]::DeepSkyBlue
     $linkServidor.LinkBehavior = 'HoverUnderline'
-    $linkServidor.Add_LinkClicked({ Start-Process "https://mega.nz/folder/51o2XRSQ#PaC_SmNqXFXzRnlMfi_HBQ" }.GetNewClosure())
+    $linkServidor.Add_LinkClicked({ Start-Process "https://mega.nz/folder/hxQmXLRb#KWndIOS7qwFvsz2nlw2Ugg" }.GetNewClosure())
     $boxServidor.Controls.Add($linkServidor)
 
     $btnCerrar = New-Object System.Windows.Forms.Button
